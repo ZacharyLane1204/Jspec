@@ -74,14 +74,14 @@ if os.getenv("CRDS_SERVER_URL") is None:
 from astropy.io import fits                     # noqa: E402
 from astroquery.mast import Observations        # noqa: E402
 
-import pipelines.jwst_proposal_pipeline as jwst_proposal_pipeline                                      # noqa: E402
+import jspec.pipelines.jwst_proposal_pipeline as jwst_proposal_pipeline                                      # noqa: E402
 from jwst.pipeline import Detector1Pipeline, Image2Pipeline, Image3Pipeline  # noqa: E402
 from jwst.associations import asn_from_list as afl                        # noqa: E402
 from jwst.associations.lib.rules_level2_base import DMSLevel2bBase        # noqa: E402
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base       # noqa: E402
 
-from pipelines.astrobkginterp_thermal import apply_to_fits_file as abi_thermal_correct  # noqa: E402
-from pipelines.kde_bkg_correct import apply_to_fits_file as kde_bkg_correct  # noqa: E402
+from jspec.pipelines.astrobkginterp_thermal import apply_to_fits_file as abi_thermal_correct  # noqa: E402
+from jspec.pipelines.kde_bkg_correct import apply_to_fits_file as kde_bkg_correct  # noqa: E402
 
 
 # ===========================================================================

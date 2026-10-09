@@ -61,7 +61,7 @@ import os
 
 import numpy as np
 
-from pipelines.nirspec_fs_refining import (
+from jspec.pipelines.nirspec_fs_refining import (
     read_x1d, read_s2d, cross_profile, estimate_position, pipeline_extraction_box, slit_name,
     reextract_at_row, stitch, save_spectrum, plot_qa, plot_spectrum, check_same_epoch, mjd_to_datestr,
 )

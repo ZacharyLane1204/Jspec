@@ -38,7 +38,7 @@ import argparse
 import numpy as np
 from astropy.io import fits
 
-import pipelines.miri_mrs_auto_pipeline as mp
+import jspec.pipelines.miri_mrs_auto_pipeline as mp
 
 
 def read_x1d_simple(path):

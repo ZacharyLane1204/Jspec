@@ -50,7 +50,7 @@ import shutil
 
 from astropy.io import fits
 
-from pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr
+from jspec.pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr
 
 
 def uncal_exists(outdir, proposal_padded):
@@ -71,7 +71,7 @@ def download_if_missing(proposal, outdir, dataset_ids=None):
               f"already in {outdir} -- skipping download.")
         return existing
 
-    from pipelines.mast_uncal_download import download_uncal
+    from jspec.pipelines.mast_uncal_download import download_uncal
     os.makedirs(outdir, exist_ok=True)
     files = download_uncal(["MIRI/IFU"], proposal_padded, proposal, outdir,
                             name_contains=("mirifu",), dataset_ids=dataset_ids)

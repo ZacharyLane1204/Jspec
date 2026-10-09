@@ -80,9 +80,9 @@ import re
 
 import numpy as np
 
-import pipelines.miri_mrs_auto_pipeline as mp
-from pipelines.combine_epoch_spectra import combine_epoch_spectrum
-from pipelines.combine_nirspec_orders import save_combined_spectrum
+import jspec.pipelines.miri_mrs_auto_pipeline as mp
+from jspec.pipelines.combine_epoch_spectra import combine_epoch_spectrum
+from jspec.pipelines.combine_nirspec_orders import save_combined_spectrum
 
 
 _CHBAND_RE = re.compile(r"_ch(\d)-(short|medium|long)_s3d\.fits$", re.IGNORECASE)

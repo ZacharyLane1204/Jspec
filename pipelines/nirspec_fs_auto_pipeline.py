@@ -74,7 +74,7 @@ from jwst.associations import asn_from_list as afl                         # noq
 from jwst.associations.lib.rules_level2_base import DMSLevel2bBase         # noqa: E402
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base        # noqa: E402
 
-from pipelines.nirspec_fs_refining import (                                          # noqa: E402
+from jspec.pipelines.nirspec_fs_refining import (                                          # noqa: E402
     FS_EXP_TYPE, read_meta, assign_epochs, sanitize, mjd_to_datestr,
     read_x1d, stitch, save_spectrum, plot_spectrum,
 )

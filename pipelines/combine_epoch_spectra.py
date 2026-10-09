@@ -54,7 +54,7 @@ import os
 import numpy as np
 from astropy.stats import sigma_clip
 
-from pipelines.combine_nirspec_orders import (
+from jspec.pipelines.combine_nirspec_orders import (
     read_x1d, get_mjd, get_mjd_info, group_files_by_epoch, mjd_to_datestr,
     save_combined_spectrum,
 )

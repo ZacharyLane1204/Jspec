@@ -125,9 +125,8 @@ Everything from there on works without `jwst` or `crds` installed.
 Each arrow is one command. The whole thing, for one target, is roughly:
 
 ```bash
-python -m jspec.pipelines.prepare_mrs_pfpc_epochs --proposal 9233 --workdir SN2024aecx/
-python -m jspec.pipelines.miri_mrs_auto_pipeline  --proposal 9233 --outdir SN2024aecx/ep1 --ra RA --dec DEC
-python -m jspec.pipelines.abi_reextract_pfpc      --level3-dir SN2024aecx/ep1/stage3 --outdir SN2024aecx/ep1/reex --product-name sn2024aecx
+python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 --outdir SN2024aecx/ --max-cores half
+python -m jspec.pipelines.abi_reextract_pfpc     --level3-dir SN2024aecx/stage3 --outdir SN2024aecx/reex/2025-06-01 --product-name SN2024AECX_2025-06-01
 jspec epochs "SN2024aecx/*/reex/*_x1d.fits"
 jspec stitch "SN2024aecx/*/reex/*_x1d.fits" -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
 jspec detect SN2024aecx_2025-06-01.ecsv -z 0.002665 -o features.ecsv
@@ -157,52 +156,204 @@ The first pipeline run downloads several GB of reference files into
 
 ### 3.0 Find your source position
 
-Most extraction steps want explicit coordinates rather than trusting the
-header target position. If you already have a Level-3 cube:
+**You do not need this to start.** If you give no position, the pipeline
+locates the brightest point source in each cube itself (see
+[3.1.1](#311-what-if-i-do-not-have-a-refined-ra-and-dec-yet)), which is the
+right choice for a multi-epoch proposal. Use this step only to *refine* a
+position later, or when auto-location picks the wrong object. If you already
+have a Level-3 cube:
 
 ```bash
 python -m jspec.pipelines.get_source_radec --cube some_s3d.fits
 python -m jspec.pipelines.get_source_radec --cube some_s3d.fits --x 24 --y 27
 ```
 
-Write down the RA/Dec it prints; you will pass it to the extraction steps.
+Pass the RA/Dec it prints back in with `--from-stage3`, which reuses the
+existing cubes and so takes minutes rather than hours.
 
 ### 3.1 MIRI MRS
 
-Four steps: split into epochs, run Stage 1–3, re-extract, combine channels.
+**You do not run this once per epoch.** `miri_mrs_auto_pipeline` is already
+epoch-aware: after Stage 2 it calls `get_epoch_groups()`, which clusters the
+calibrated exposures by `(TARGNAME, epoch)` and builds a *separate Stage-3
+association per group*. A proposal with one target observed four times gives
+you four Level-3 cubes, named `<TARGNAME>_<epoch-date>`:
+
+```
+4 (target, epoch) group(s) across 1 target(s) (>1.0 day gap = new epoch)
+  SN2024AECX_2025-01-17  SN2024AECX_2025-06-01
+  SN2024AECX_2025-12-07  SN2024AECX_2025-12-28
+```
+
+So the normal MRS run is one command for the whole proposal:
 
 ```bash
-# (a) Download any uncal files you do not already have, and split them
-#     into one subdirectory per epoch. This is what keeps visits apart.
-python -m jspec.pipelines.prepare_mrs_pfpc_epochs \
-    --proposal 9233 --workdir SN2024aecx/ --max-gap-days 1.0
-
-# (b) Stage 1 -> 2 -> 3, ONCE PER EPOCH subdirectory printed by (a).
 python -m jspec.pipelines.miri_mrs_auto_pipeline \
-    --proposal 9233 \
-    --outdir SN2024aecx/epoch_2025-06-01 \
-    --ra 123.456 --dec -12.345 \
-    --bkg-mode polynomial --aper-rad 7 --ann-width 6 --max-cores half
+    --proposal 9233 --outdir SN2024aecx/ \
+    --max-epoch-gap-days 1.0 --max-cores half
+```
 
-# (c) Re-extract with background interpolation (the recommended extraction).
+Note what is *not* in that command: no `--ra/--dec`, and no aperture or
+background options. The defaults are the recommended values, and the source
+position is found automatically — see
+[3.1.1](#311-what-if-i-do-not-have-a-refined-ra-and-dec-yet) and
+[3.1.2](#312-choosing-the-background-and-aperture-options) below.
+
+Then re-extract and combine, **per epoch**:
+
+```bash
+# Re-extract one epoch's cube (this is the recommended extraction).
 python -m jspec.pipelines.abi_reextract_pfpc \
-    --level3-dir SN2024aecx/epoch_2025-06-01/stage3 \
-    --outdir     SN2024aecx/epoch_2025-06-01/reextract \
-    --product-name sn2024aecx --ra 123.456 --dec -12.345 \
-    --bkg-mode polynomial --fwhm-scale 2.5
+    --level3-dir SN2024aecx/stage3 \
+    --outdir     SN2024aecx/reextract/2025-06-01 \
+    --product-name SN2024AECX_2025-06-01 \
+    --fwhm-scale 2.5
 
-# (d) Combine the twelve MRS sub-bands within each epoch.
+# Combine the twelve MRS sub-bands within that epoch.
 python -m jspec.pipelines.combine_epoch_spectra \
-    --indir SN2024aecx/epoch_2025-06-01/reextract \
+    --indir SN2024aecx/reextract/2025-06-01 \
     --pattern "*_x1d.fits" --outdir combined_spectra --max-gap-days 1.0
 ```
 
-Why step (a) exists: the MRS Stage-3 driver names its Level-3 products after
-whatever directory you point it at. Splitting the uncalibrated files into
-per-epoch subdirectories first means the epoch separation falls out of the
-product naming automatically, instead of needing the Stage-3 association
-logic to be patched. Step (b) is deliberately one run per epoch rather than
-an automatic loop — a Stage 1–3 run is expensive and worth watching.
+`--product-name` is what selects the epoch: pass the Level-3 product name
+the previous step printed.
+
+To narrow a run rather than process everything, use `--dataset` (specific
+observations) or `--tag` (appended to product names, so parallel runs with
+different settings do not overwrite each other). Restart options
+(`--skip-download`, `--from-stage3`, `--redo`) are in
+[3.4](#34-restarting-without-redoing-everything).
+
+> **The other route.** `prepare_mrs_pfpc_epochs` is for the *separate*
+> MRS-PFPC `pfpc_proc` workflow, not for the pipeline above. `pfpc_proc`
+> runs Stage 1–3 as a single call and names its products after whatever
+> directory you point it at, so it has no hook for epoch-aware association
+> building. That script therefore downloads the uncal files and symlinks
+> them into one subdirectory per epoch, so the separation falls out of the
+> product naming. You then run `pfpc_proc` yourself once per printed
+> subdirectory. Use this only if you are using PFPC; otherwise
+> `miri_mrs_auto_pipeline` already does the epoch handling for you.
+
+#### 3.1.1 What if I do not have a refined RA and Dec yet?
+
+**Then do not pass one.** If you omit `--ra/--dec` and `--src-x/--src-y`,
+the pipeline calls `locate_source_pixel()` on each cube, which runs
+DAOStarFinder on the median-collapsed cube and takes the brightest point
+source. This is AstroBkgInterp's own recommended approach, and it gives
+AstroBkgInterp what it actually wants — pixel coordinates — rather than
+RA/Dec that then have to be run through the WCS.
+
+It reports what it found, per cube, so you can check it:
+
+```
+SN2024AECX_2025-06-01: source at (x=24.31, y=27.08)
+```
+
+If it finds nothing it warns and skips that cube rather than guessing.
+
+**For a multi-epoch proposal, omitting the position is actively the better
+choice.** An explicit `--ra/--dec` is a single global value applied to every
+(target, epoch) group in the run, which is wrong as soon as there is more
+than one group — different visits have different pointings and dithers. The
+pipeline warns about exactly this:
+
+```
+NOTE: an explicit source position was given but there is more than one
+(target, epoch) group in this run -- the same position will be applied to
+all of them, which is probably not what you want.
+```
+
+Auto-location, by contrast, is done per cube.
+
+Give an explicit position only when auto-location fails or picks the wrong
+object — a crowded field, a faint target next to a bright neighbour, or a
+source too faint to be detected in the collapsed cube. In that case narrow
+the run to one epoch first (`--dataset` or `--tag`), then pass the position
+for that epoch.
+
+The refinement path, once you have a first cube:
+
+```bash
+# Get RA/Dec (or pixel coords) from an existing cube.
+python -m jspec.pipelines.get_source_radec --cube SN2024aecx/stage3/..._s3d.fits
+
+# Re-run only the post-Stage-3 part with the refined position.
+python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 \
+    --outdir SN2024aecx/ --from-stage3 --dataset <one-obs> \
+    --ra 123.456 --dec -12.345
+```
+
+`--from-stage3` reuses the existing cubes, so this is minutes rather than
+hours. For sub-pixel work, `find_source_centroid()` and
+`refine_and_reprocess()` do a weighted cube collapse followed by
+SExtractor-style detection, which is more accurate than either the header
+position or eyeballing an image.
+
+#### 3.1.2 Choosing the background and aperture options
+
+Short version: **the defaults are the recommended values.** The long option
+string in older notes is unnecessary, and one of those options does nothing
+for cubes.
+
+| Option | Default | What it actually controls |
+|---|---|---|
+| `--fwhm-scale` | 2.5 | **The real aperture knob.** Source-mask radius per slice = `ceil(fwhm_scale × FWHM(λ))` |
+| `--min-aper-rad` | 5 px | Floor on that radius, for the blue end where the PSF is narrow |
+| `--aper-rad` | 7 px | **Ignored for cubes.** 2-D input only |
+| `--ann-width` | 6 px | Width of the annulus sampled for background under the masked source |
+| `--bkg-mode` | `polynomial` | `polynomial` or `simple`. These are the only two AstroBkgInterp implements — there is no "skip" |
+| `--poly-k` | 3 | Degree of the 2-D polynomial (polynomial mode) |
+| `--bin-size` | 9 px | Sliding-window size for that fit |
+| `--cube-resolution` | `high` | Sampling density of the fit |
+| `--pool-size` | cores−1 | Main lever on runtime; AstroBkgInterp is otherwise single-threaded per cube |
+
+**`--aper-rad` is a trap.** AstroBkgInterp overrides it in cube mode,
+recomputing the radius per wavelength slice from the PSF FWHM. Setting
+`--aper-rad 7` on an MRS run changes nothing. Use `--fwhm-scale`.
+
+**Why `fwhm-scale` is the one to care about.** The MRS PSF has broad wings.
+If the source mask is too small, those wings fall outside it, get classified
+as background, and are fitted and subtracted — eating into the flux you are
+trying to measure. AstroBkgInterp's old default of 1.5 FWHM does this
+noticeably on bright targets, which is why the default here is 2.5.
+
+How to tell it is wrong, and what to do:
+
+- *Extracted spectrum looks suppressed, or the continuum sits low against
+  photometry* → mask too small. Raise `--fwhm-scale` to 3.0–3.5. The cost is
+  a larger interpolated hole, so the background under the source is less
+  well constrained.
+- *Background is over-subtracted near the source, or you see a ring* → mask
+  too large relative to the field, leaving too little clean background.
+  Lower it toward 2.0, or widen `--ann-width`.
+- *Blue channels look over-subtracted* → the mask has collapsed to a few
+  pixels where the PSF is narrowest. Raise `--min-aper-rad`.
+
+The run prints the mask radii it used, which is the first thing to check:
+
+```
+Source mask radius: 5-14 px (fwhm_scale=2.5, min_aper_rad=5);
+PSF FWHM 1.8-5.6 px
+```
+
+**`--bkg-mode`.** Keep `polynomial` for MRS. `simple` takes an annulus
+median — fine for a flat background, but MRS cubes have real structure
+across the field, and a flat level then leaves gradients that turn into
+spurious broad features after stitching. Drop to `simple` only if the
+polynomial fit is unstable, which shows up as a background that oscillates
+between adjacent wavelength slices; a less aggressive `--poly-k 2` is worth
+trying first.
+
+**`--bin-size`** trades resolution against stability: smaller tracks finer
+background structure but is noisier. 9 px is a reasonable middle for MRS.
+
+> **One known bug, already handled.** AstroBkgInterp's own background-error
+> term is wrong — it uses the `lstsq` sum-of-squared-residuals as if it were
+> fit coefficients, inflating the cube's ERR by ~5 orders of magnitude and
+> making every downstream error bar meaningless. This pipeline estimates the
+> background-model uncertainty from the actual residual scatter instead.
+> `--use-abi-err` restores the broken behaviour and exists only for
+> reproducing old runs. Do not use it.
 
 > **Multiprocessing caveat.** Run `miri_mrs_auto_pipeline` and
 > `nirspec_ifu_auto_pipeline` from a real script guarded by
@@ -269,13 +420,14 @@ refuses to cross a gap larger than one day by default:
 
 | Stage | Control | Default |
 |---|---|---|
+| `miri_mrs_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
 | `prepare_mrs_pfpc_epochs` | `--max-gap-days` | 1.0 d |
 | `combine_epoch_spectra` | `--max-gap-days` | 1.0 d |
 | `nirspec_fs_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
 | `nirspec_ifu_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
 | `jspec stitch` / `jspec.epochs` | `--max-gap-days` | 1.0 d |
 
-All five read the same MJD (`MJD-OBS`, else `EXPSTART`; `MJD_MEAN` then
+All six read the same MJD (`MJD-OBS`, else `EXPSTART`; `MJD_MEAN` then
 `MJD_MIN` for `.ecsv` tables) through the same `group_files_by_epoch`, so
 there is exactly one definition of "epoch" in the codebase and the analysis
 layer cannot drift from the reduction layer.
@@ -919,6 +1071,19 @@ anything redward of ~24 µm.
 **`No module named jspec`** — you did not `pip install -e .`, or you are in a
 different environment. The repository root *is* the package, so a bare
 `import jspec` only works after installing.
+
+**`attempted relative import beyond top-level package`** — a `.py` file in
+the repository root contains a `from ..something import` . Because the root
+*is* the `jspec` package, a single dot is already the top level and `..`
+goes out of bounds. Use `from .something import`. Editors sometimes insert
+the extra dot automatically when files are moved; this is what it looks like.
+
+**`No module named 'pipelines'`** — a script in `pipelines/` is importing a
+sibling as `pipelines.x` instead of `jspec.pipelines.x`. The bare form only
+resolves when your current directory happens to be the repository root. All
+cross-imports between pipeline scripts should be absolute
+(`from jspec.pipelines.combine_nirspec_orders import get_mjd`), which works
+whether the script is run with `-m`, run directly, or imported.
 
 **`fit_feature needs dynesty: pip install dynesty`** — exactly what it says.
 

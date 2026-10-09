@@ -16,6 +16,7 @@ crds_cache/
 *_cal.fits
 *_s3d.fits
 *_x1d.fits
+*.fits
 
 # Reduction and analysis outputs
 stage1/

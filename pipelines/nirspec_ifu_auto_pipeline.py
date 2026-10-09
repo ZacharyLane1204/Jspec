@@ -171,8 +171,8 @@ from jwst.associations import asn_from_list as afl                        # noqa
 from jwst.associations.lib.rules_level2_base import DMSLevel2bBase        # noqa: E402
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base       # noqa: E402
 
-from pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr  # noqa: E402
-from pipelines.mast_uncal_download import download_uncal  # noqa: E402  (keep next to this script)
+from jspec.pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr  # noqa: E402
+from jspec.pipelines.mast_uncal_download import download_uncal  # noqa: E402  (keep next to this script)
 
 # AstroBkgInterp -- https://github.com/brynickson/AstroBkgInterp
 from AstroBkgInterp.AstroBkgInterp import AstroBkgInterp  # noqa: E402

@@ -32,7 +32,7 @@ import argparse
 from astropy.io import fits
 from astropy.wcs import WCS
 
-import pipelines.miri_mrs_auto_pipeline as mp
+import jspec.pipelines.miri_mrs_auto_pipeline as mp
 
 
 def pixel_to_radec(cube_file, x, y):

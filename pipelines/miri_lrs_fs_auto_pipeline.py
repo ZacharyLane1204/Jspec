@@ -79,8 +79,8 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base        # noq
 
 # Optional: reuse the NIRSpec writers so the final files share one format.
 try:
-    from pipelines.nirspec_fs_refining import save_spectrum as _shared_save          # noqa: E402
-    from pipelines.nirspec_fs_refining import plot_spectrum as _shared_plot          # noqa: E402
+    from jspec.pipelines.nirspec_fs_refining import save_spectrum as _shared_save          # noqa: E402
+    from jspec.pipelines.nirspec_fs_refining import plot_spectrum as _shared_plot          # noqa: E402
 except Exception:                                                          # noqa: BLE001
     _shared_save = _shared_plot = None
 

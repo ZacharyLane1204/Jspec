@@ -41,7 +41,7 @@ from __future__ import annotations
 
 __version__ = "0.1.0"
 
-from ..spectrum import (
+from .spectrum import (
     Spectrum,
     Segment,
     read_spectrum,
@@ -52,7 +52,7 @@ from ..spectrum import (
     MRS_RED_END_UM,
 )
 
-from ..epochs import (
+from .epochs import (
     EpochGroup,
     group_paths_by_epoch,
     group_segments_by_epoch,

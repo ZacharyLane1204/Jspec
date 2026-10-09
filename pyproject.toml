@@ -27,8 +27,9 @@ fit = ["dynesty>=2.0"]
 metallicity = ["pyneb>=1.1"]
 # The Stage 1-3 reduction scripts in jspec/pipelines. Heavy; install only
 # if you are reducing data rather than analysing an existing spectrum.
-pipelines = ["jwst>=1.12", "crds", "astroquery", "AstroBkgInterp"]
-all = ["dynesty>=2.0", "pyneb>=1.1", "jwst>=1.12", "crds", "astroquery", "AstroBkgInterp"]
+pipelines = ["jwst>=1.12", "crds", "astroquery", "AstroBkgInterp", "sep"]
+all = ["dynesty>=2.0", "pyneb>=1.1", "jwst>=1.12", "crds", "astroquery",
+       "AstroBkgInterp", "sep"]
 
 [project.scripts]
 jspec = "jspec.cli:main"

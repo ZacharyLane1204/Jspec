@@ -61,7 +61,7 @@ import os
 
 from astropy.io import fits
 
-from pipelines.background_subtraction import determine_background
+from jspec.pipelines.background_subtraction import determine_background
 
 
 @contextlib.contextmanager

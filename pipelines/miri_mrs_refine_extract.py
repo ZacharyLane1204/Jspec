@@ -216,7 +216,7 @@ _MP = None
 def _mp():
     global _MP
     if _MP is None:
-        import pipelines.miri_mrs_auto_pipeline as mp
+        import jspec.pipelines.miri_mrs_auto_pipeline as mp
         _MP = mp
     return _MP
 
