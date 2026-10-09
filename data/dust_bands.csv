@@ -1,0 +1,79 @@
+name,species,lam_peak_um,lam_min_um,lam_max_um,kind,transition,color,notes
+# ---------------------------------------------------------------------------
+# jspec dust and molecular band reference
+#
+# All wavelengths are REST-FRAME VACUUM microns.
+#
+# lam_min_um / lam_max_um bracket the *band*, i.e. the span that should be
+# shaded with axvspan. lam_peak_um is where the feature peaks (emission) or
+# bottoms out (absorption). For band systems with many overlapping heads
+# (CO, SiO) the bracket covers the whole band system, which is the useful
+# thing to shade -- the individual heads are in the 'transition' column.
+#
+# kind : molecular | pah | silicate | crystalline | ice | carbon | other
+#        Used for colouring and for filtering which families are drawn.
+#
+# IMPORTANT: band positions for solid-state features shift with grain
+# composition, size, shape and temperature -- the amorphous silicate peak
+# moves between roughly 9.3 and 9.8 um depending on the dust model. Treat
+# these brackets as where to look, not as a measurement.
+# ---------------------------------------------------------------------------
+CO fundamental,CO,4.67,4.40,5.40,molecular,v=1-0 delta-v=1,#d62728,Strong in cool SN/AGB ejecta; band head at 4.67 um with a red-degraded P-branch
+CO first overtone,CO,2.35,2.29,2.50,molecular,v=2-0 delta-v=2,#d62728,Band heads at 2.294 2.323 2.353 2.383 2.414 um; the classic NIR CO signature
+CO second overtone,CO,1.58,1.55,1.80,molecular,v=3-0 delta-v=3,#d62728,Weak; needs high column
+SiO fundamental,SiO,8.00,7.50,9.50,molecular,v=1-0,#9467bd,Broad; overlaps the amorphous silicate feature so the two must be fitted together
+SiO first overtone,SiO,4.03,3.95,4.20,molecular,v=2-0,#9467bd,Band heads near 4.00-4.10 um
+SiS fundamental,SiS,13.3,12.8,14.2,molecular,v=1-0,#9467bd,
+AlO B-X (0-0),AlO,0.4842,0.4800,0.4900,molecular,B2Sigma-X2Sigma 0-0,#17becf,Electronic band; optical not JWST but kept for cross-instrument work
+AlO B-X (1-0),AlO,0.4648,0.4610,0.4700,molecular,B2Sigma-X2Sigma 1-0,#17becf,
+AlO B-X (0-1),AlO,0.5079,0.5040,0.5140,molecular,B2Sigma-X2Sigma 0-1,#17becf,
+AlO B-X (0-2),AlO,0.5336,0.5290,0.5400,molecular,B2Sigma-X2Sigma 0-2,#17becf,
+AlO fundamental,AlO,10.9,10.3,11.6,molecular,v=1-0,#17becf,Vibrational band; blends with the 11.3 um PAH and SiC features
+SiN,SiN,0.4000,0.3900,0.4200,molecular,electronic,#17becf,
+CS fundamental,CS,7.9,7.6,8.3,molecular,v=1-0,#9467bd,
+CN red system,CN,1.10,1.05,1.20,molecular,A2Pi-X2Sigma,#17becf,
+H2O bending,H2O,6.2,5.5,7.5,molecular,nu2 bend (gas),#1f77b4,Gas-phase; broad and easily confused with the 6.2 um PAH
+H2O stretch,H2O,2.7,2.5,3.1,molecular,nu1/nu3 stretch (gas),#1f77b4,
+OH,OH,2.9,2.7,3.2,molecular,fundamental,#1f77b4,
+PAH 3.3,PAH,3.29,3.20,3.40,pah,C-H stretch,#ff7f0e,Aromatic C-H stretch; the cleanest PAH band in the NIR
+PAH 6.2,PAH,6.22,6.00,6.45,pah,C-C stretch,#ff7f0e,Ionised PAH tracer
+PAH 7.7,PAH,7.70,7.20,8.20,pah,C-C stretch complex,#ff7f0e,A complex of 7.6 and 7.8 um sub-features; usually the strongest PAH band
+PAH 8.6,PAH,8.60,8.30,8.90,pah,C-H in-plane bend,#ff7f0e,Sits on the blue wing of the silicate feature
+PAH 11.3,PAH,11.26,11.10,11.65,pah,C-H out-of-plane solo,#ff7f0e,Neutral PAH tracer; overlaps forsterite 11.3 and SiC 11.3
+PAH 12.0,PAH,12.00,11.80,12.20,pah,C-H oop duo,#ff7f0e,
+PAH 12.7,PAH,12.70,12.50,13.00,pah,C-H oop trio,#ff7f0e,Blends with [Ne II] 12.81
+PAH 13.5,PAH,13.55,13.40,13.70,pah,C-H oop quarto,#ff7f0e,
+PAH 14.2,PAH,14.20,14.00,14.40,pah,C-H oop,#ff7f0e,
+PAH 16.4,PAH,16.45,16.20,16.70,pah,C-C-C bend,#ff7f0e,
+PAH 17.4,PAH,17.38,17.20,17.60,pah,C-C-C bend,#ff7f0e,
+PAH 17.8,PAH,17.87,17.70,18.10,pah,C-C-C bend,#ff7f0e,
+Silicate 9.7,amorphous silicate,9.70,8.00,12.50,silicate,Si-O stretch,#8c564b,The classic broad amorphous silicate feature; in emission or absorption depending on optical depth and geometry
+Silicate 18,amorphous silicate,18.00,15.00,22.00,silicate,O-Si-O bend,#8c564b,Partner of the 9.7 um feature; their ratio constrains grain size and optical depth
+Forsterite 11.3,Mg2SiO4,11.30,11.15,11.45,crystalline,crystalline olivine,#2ca02c,Narrow; overlaps PAH 11.3 -- the two are separable only at MRS resolution
+Forsterite 16.2,Mg2SiO4,16.20,16.00,16.40,crystalline,crystalline olivine,#2ca02c,
+Forsterite 19.7,Mg2SiO4,19.70,19.40,20.00,crystalline,crystalline olivine,#2ca02c,
+Forsterite 23.7,Mg2SiO4,23.70,23.30,24.10,crystalline,crystalline olivine,#2ca02c,
+Forsterite 27.6,Mg2SiO4,27.60,27.10,28.10,crystalline,crystalline olivine,#2ca02c,Near the MRS ch4-long red cutoff where calibration is poorest
+Forsterite 33.6,Mg2SiO4,33.60,33.00,34.20,crystalline,crystalline olivine,#2ca02c,Beyond MRS coverage
+Enstatite 9.3,MgSiO3,9.30,9.15,9.45,crystalline,crystalline pyroxene,#2ca02c,
+Enstatite 10.6,MgSiO3,10.60,10.45,10.75,crystalline,crystalline pyroxene,#2ca02c,
+Enstatite 11.6,MgSiO3,11.60,11.45,11.75,crystalline,crystalline pyroxene,#2ca02c,
+Enstatite 19.5,MgSiO3,19.50,19.20,19.80,crystalline,crystalline pyroxene,#2ca02c,
+Enstatite 21.5,MgSiO3,21.50,21.20,21.80,crystalline,crystalline pyroxene,#2ca02c,
+Enstatite 24.5,MgSiO3,24.50,24.20,24.80,crystalline,crystalline pyroxene,#2ca02c,
+SiC 11.3,SiC,11.30,10.60,11.90,other,Si-C stretch,#e377c2,Carbon-star dust; degenerate with PAH 11.3 and forsterite 11.3 at low resolution
+MgS 30,MgS,30.00,26.00,38.00,other,,#e377c2,Very broad; the '30 um feature'. Mostly beyond MRS
+FeS 23,FeS,23.00,22.00,24.50,other,,#e377c2,
+FeO 20,FeO,20.00,19.00,21.50,other,,#e377c2,
+Amorphous carbon,amorphous carbon,,2.00,30.00,carbon,featureless continuum,#7f7f7f,No band structure; shows up only as continuum slope -- listed so it is not forgotten as a dust candidate
+Graphite 11.5,graphite,11.50,11.00,12.00,carbon,,#7f7f7f,
+H2O ice 3.05,H2O ice,3.05,2.80,3.50,ice,O-H stretch,#1f77b4,Deep absorption; a broad red wing indicates grain growth
+H2O ice 6.0,H2O ice,6.00,5.80,6.40,ice,H-O-H bend,#1f77b4,Overlaps the 6.2 um PAH band
+H2O ice 13,H2O ice,13.00,11.00,16.00,ice,libration,#1f77b4,Very broad; easily absorbed into a bad continuum fit
+CO2 ice 4.27,CO2 ice,4.27,4.20,4.35,ice,nu3 stretch,#1f77b4,Narrow and deep; a sensitive ice thermal-history probe
+CO2 ice 15.2,CO2 ice,15.20,15.00,15.60,ice,nu2 bend,#1f77b4,Double-peaked when crystalline
+CO ice 4.67,CO ice,4.675,4.64,4.71,ice,stretch,#1f77b4,Overlaps the gas-phase CO fundamental band head
+CH4 ice 7.7,CH4 ice,7.68,7.60,7.76,ice,nu4 bend,#1f77b4,Overlaps the 7.7 um PAH complex
+CH3OH ice 9.7,CH3OH ice,9.74,9.60,9.90,ice,C-O stretch,#1f77b4,In the silicate trough
+NH3 ice 9.0,NH3 ice,9.00,8.80,9.30,ice,umbrella,#1f77b4,
+XCN 4.62,OCN-,4.62,4.57,4.67,ice,CN stretch,#1f77b4,

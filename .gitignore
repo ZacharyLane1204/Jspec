@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+
+# JWST / CRDS artefacts
+crds_cache/
+*.uncal.fits
+*_rate.fits
+*_rateints.fits
+*_cal.fits
+*_s3d.fits
+*_x1d.fits
+
+# Reduction and analysis outputs
+stage1/
+stage2/
+stage3/
+combined_spectra/
+final_spectra/
+*.png
+*.pdf
+*.npz
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
