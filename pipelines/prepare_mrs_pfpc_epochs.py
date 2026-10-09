@@ -50,6 +50,7 @@ import shutil
 
 from astropy.io import fits
 
+from jspec.layout import ensure_epoch_tree
 from jspec.pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr
 
 
@@ -87,16 +88,31 @@ def get_target(path):
     return re.sub(r"[^A-Za-z0-9._+-]+", "", str(name))
 
 
-def split_by_epoch(uncal_files, workdir, max_gap_days=1.0, copy=False):
-    """Cluster `uncal_files` into epochs (MJD-based, group_files_by_epoch)
-    and link/copy each cluster into its own subdirectory under `workdir`,
-    named "<target>_<date>_uncal". Returns a list of dicts: {label,
-    subdir, date, files}, time-ordered."""
+def split_by_epoch(uncal_files, outdir, max_gap_days=1.0, copy=False, tag=None):
+    """Cluster `uncal_files` into epochs and lay out one directory each.
+
+    The directories follow the standard jspec layout
+    (<outdir>/MIRI-MRS/<tag>_<date>/), but with one concession to how
+    MRS-PFPC works: the uncal files are placed *flat* in the epoch
+    directory as well as in its uncal/ subdirectory.
+
+    That is not redundancy for its own sake. pfpc_proc globs
+    "<objname>/jw*mirifu*uncal.fits" relative to the current directory
+    and writes every output back into that same directory, naming each
+    Level-3 product after it ("<objname>_level3_ch1-short_s3d.fits").
+    Pointing it at the epoch directory is therefore the only way to get
+    products named <tag>_<date>_level3_*, which is what the rest of the
+    layout expects. Afterwards, import_pfpc_products sorts the flat dump
+    into stage1/stage2/stage3/pfpc.
+
+    Returns a list of time-ordered dicts: {label, subdir, date, tag,
+    paths, files}.
+    """
     if not uncal_files:
         raise SystemExit("No uncal files given to split.")
 
     clusters = group_files_by_epoch(uncal_files, max_gap_days=max_gap_days)
-    target = get_target(uncal_files[0])
+    target = tag or get_target(uncal_files[0])
     print(f"\n{len(uncal_files)} uncal file(s) -> {len(clusters)} epoch(s) "
           f"for target {target!r} (>{max_gap_days} day gap = new epoch)")
 
@@ -104,22 +120,24 @@ def split_by_epoch(uncal_files, workdir, max_gap_days=1.0, copy=False):
     for cluster in clusters:
         mjds = [m for m in (get_mjd(f) for f in cluster) if m is not None]
         date = mjd_to_datestr(sum(mjds) / len(mjds)) if mjds else "unknown-date"
-        label = f"{target}_{date}"
-        subdir = os.path.join(workdir, f"{label}_uncal")
-        os.makedirs(subdir, exist_ok=True)
+        paths = ensure_epoch_tree(outdir, "MIRI-MRS", target, date)
+        label = paths["stem"]
+        subdir = paths["epoch"]
 
         for f in cluster:
-            dst = os.path.join(subdir, os.path.basename(f))
-            if os.path.exists(dst) or os.path.islink(dst):
-                continue
-            if copy:
-                shutil.copy2(f, dst)
-            else:
-                os.symlink(os.path.abspath(f), dst)
+            for dst_dir in (subdir, paths["uncal"]):
+                dst = os.path.join(dst_dir, os.path.basename(f))
+                if os.path.exists(dst) or os.path.islink(dst):
+                    continue
+                if copy and dst_dir is subdir:
+                    shutil.copy2(f, dst)
+                else:
+                    os.symlink(os.path.abspath(f), dst)
 
-        print(f"  {label}: {len(cluster)} file(s) -> {subdir}")
+        print(f"  {label}: {len(cluster)} file(s) -> "
+              f"{os.path.relpath(subdir, outdir)}")
         results.append({"label": label, "subdir": subdir, "date": date,
-                         "files": cluster})
+                         "tag": target, "paths": paths, "files": cluster})
 
     return results
 
@@ -132,9 +150,11 @@ def main():
                       help="Proposal ID to download (if not already present)")
     src.add_argument("--uncal-dir",
                       help="Directory of uncal files already on disk (skip download)")
-    ap.add_argument("--workdir", required=True,
-                     help="Parent directory to create epoch subdirectories in "
-                          "(and to download into, if --proposal is used)")
+    ap.add_argument("--outdir", "--workdir", dest="outdir", required=True,
+                     help="Output directory for this target. Epoch directories "
+                          "are created at <outdir>/MIRI-MRS/<target>_<date>/.")
+    ap.add_argument("--tag", default=None,
+                     help="Override the target name used in directory names")
     ap.add_argument("--max-gap-days", type=float, default=1.0)
     ap.add_argument("--dataset", nargs="*", default=None,
                      help="With --proposal: only these dataset IDs")
@@ -143,20 +163,40 @@ def main():
     args = ap.parse_args()
 
     if args.proposal is not None:
-        dl_dir = os.path.join(args.workdir, "_downloaded_uncal")
+        dl_dir = os.path.join(args.outdir, "_downloaded_uncal")
         uncal_files = download_if_missing(args.proposal, dl_dir, dataset_ids=args.dataset)
     else:
         uncal_files = sorted(glob.glob(os.path.join(args.uncal_dir, "*mirifu*uncal.fits")))
         if not uncal_files:
             raise SystemExit(f"No *mirifu*uncal.fits files found in {args.uncal_dir}")
 
-    results = split_by_epoch(uncal_files, args.workdir,
-                              max_gap_days=args.max_gap_days, copy=args.copy)
+    results = split_by_epoch(uncal_files, args.outdir,
+                              max_gap_days=args.max_gap_days, copy=args.copy,
+                              tag=args.tag)
 
-    print("\nRun pfpc_proc separately for each epoch, e.g.:")
-    print(f"  cd {args.workdir}")
+    mrs_dir = os.path.dirname(results[0]["subdir"])
+    first = results[0]["label"]
+
+    # pfpc_proc resolves its argument as "<objname>/" relative to the
+    # current directory, so the cd is required, not cosmetic -- and the
+    # argument must be a bare directory name. Passing a path puts a "/"
+    # inside the Level-3 product name, and the run then fails at the save
+    # step, after Detector1, Spec2 and Spec3 have all completed.
+    print("\nNext: run MRS-PFPC once per epoch (in your jspec or mrs_pfpc env).")
+    print(f"  cd {mrs_dir}")
     for r in results:
-        print(f"  pfpc_proc {os.path.basename(r['subdir'])}")
+        print(f"  pfpc_proc {r['label']} && pfpc_cor {r['label']}")
+    print("\npfpc_proc runs Detector1+Spec2+Spec3 and writes its outputs back")
+    print("into the epoch directory; pfpc_cor then applies the point-source")
+    print("fringe/photometric correction, giving:")
+    print(f"  {first}/{first}_pfpc_ch*-*_x1d.fits")
+
+    print("\nThen sort those outputs into the standard layout:")
+    print(f"  python -m jspec.pipelines.import_pfpc_products --outdir {args.outdir}")
+    print("\nand re-extract with AstroBkgInterp to get the final spectrum")
+    print("(this is the recommended MIRI MRS product, and is what gets")
+    print("recorded in products.csv):")
+    print(f"  python -m jspec.pipelines.abi_reextract_pfpc --outdir {args.outdir}")
 
 
 if __name__ == "__main__":

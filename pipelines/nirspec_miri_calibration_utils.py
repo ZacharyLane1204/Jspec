@@ -8,7 +8,7 @@ Two helpers for reconciling `nirspec_fs_auto_pipeline.py` /
 
 1. `standardize_miri_ecsv()` -- rewrite a MIRI "_full"/"_clean" ecsv in the
    same column/meta convention as the NIRSpec "_final" ecsv (lowercase
-   wavelength/flux/flux_err, same meta keys), so downstream code (plotting,
+   WAVELENGTH/FLUX/FLUX_ERROR, same meta keys), so downstream code (plotting,
    PySOOT, combine_nirspec_orders-style stitching) can treat both the same
    way.
 
@@ -58,9 +58,9 @@ def standardize_miri_ecsv(miri_ecsv_path, out_path, err_column="FLUX_ERR_TOTAL",
     out_path : str
         Where to write the standardized ecsv.
     err_column : str
-        Which MIRI error column becomes the single `flux_err`. Default
+        Which MIRI error column becomes the single `FLUX_ERROR`. Default
         "FLUX_ERR_TOTAL" (= sqrt(FLUX_ERROR**2 + FLUX_SYS**2)), the closest
-        analogue of NIRSpec's single formal `flux_err` -- it folds in both
+        analogue of NIRSpec's single formal `FLUX_ERROR` -- it folds in both
         the random-noise inflation (R_white) and the hole-fill/wing-bias
         systematic (FLUX_SYS). Use "FLUX_ERROR" instead only if you
         specifically want the random-only term (e.g. for an inverse-
@@ -94,14 +94,13 @@ def standardize_miri_ecsv(miri_ecsv_path, out_path, err_column="FLUX_ERR_TOTAL",
     if err_column not in t.colnames:
         raise KeyError(f"{err_column!r} not in {miri_ecsv_path}; available: {t.colnames}")
 
-    out = Table({
-        "wavelength": t["WAVELENGTH"].data.astype(float),
-        "flux": t["FLUX"].data.astype(float),
-        "flux_err": t[err_column].data.astype(float),
-    })
-    out["wavelength"].unit = "um"
-    out["flux"].unit = t["FLUX"].unit or "Jy"
-    out["flux_err"].unit = out["flux"].unit
+    from jspec.columns import spectrum_table
+    out = spectrum_table(
+        t["WAVELENGTH"].data.astype(float),
+        t["FLUX"].data.astype(float),
+        t[err_column].data.astype(float),
+        unit=str(t["FLUX"].unit or "Jy"),
+    )
 
     meta_in = t.meta
     out.meta["TARGET"] = target or meta_in.get("TARGNAME")
@@ -119,7 +118,7 @@ def standardize_miri_ecsv(miri_ecsv_path, out_path, err_column="FLUX_ERR_TOTAL",
     out.meta = {k: v for k, v in out.meta.items() if v is not None}
 
     out.write(out_path, format="ascii.ecsv", overwrite=True)
-    print(f"wrote {out_path}  ({len(out)} rows, flux_err <- {err_column}, "
+    print(f"wrote {out_path}  ({len(out)} rows, FLUX_ERROR <- {err_column}, "
           f"{'clean' if clean_only else 'full'})")
     return out
 
@@ -163,7 +162,8 @@ def check_instrument_overlap(nirspec_ecsv_path, miri_ecsv_path, half_width=0.3, 
     is never checked by either pipeline on its own, so run it explicitly
     per epoch.
 
-    Both files must use the lowercase wavelength/flux/flux_err schema
+    Column names are normalised on read, so both the canonical
+    WAVELENGTH/FLUX/FLUX_ERROR schema and the older lower-case one work
     (run `standardize_miri_ecsv` on the MIRI file first).
 
     A step with `clean=True` on both sides (no significant local curvature)
@@ -175,8 +175,10 @@ def check_instrument_overlap(nirspec_ecsv_path, miri_ecsv_path, half_width=0.3, 
     """
     ns = Table.read(nirspec_ecsv_path, format="ascii.ecsv")
     mi = Table.read(miri_ecsv_path, format="ascii.ecsv")
-    w_ns, f_ns = ns["wavelength"].data.astype(float), ns["flux"].data.astype(float)
-    w_mi, f_mi = mi["wavelength"].data.astype(float), mi["flux"].data.astype(float)
+    from jspec.columns import normalize_columns
+    normalize_columns(ns); normalize_columns(mi)
+    w_ns, f_ns = ns["WAVELENGTH"].data.astype(float), ns["FLUX"].data.astype(float)
+    w_mi, f_mi = mi["WAVELENGTH"].data.astype(float), mi["FLUX"].data.astype(float)
 
     ov_lo, ov_hi = w_mi.min(), w_ns.max()
     if ov_hi <= ov_lo:

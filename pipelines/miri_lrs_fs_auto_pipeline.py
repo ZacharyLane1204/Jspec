@@ -77,6 +77,10 @@ from jwst.associations import asn_from_list as afl                         # noq
 from jwst.associations.lib.rules_level2_base import DMSLevel2bBase         # noqa: E402
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base        # noqa: E402
 
+from jspec.layout import (                                                 # noqa: E402
+    ensure_epoch_tree, find_staged_uncal, stage_files)
+from jspec.manifest import MANIFEST_NAME, record_product                   # noqa: E402
+
 # Optional: reuse the NIRSpec writers so the final files share one format.
 try:
     from jspec.pipelines.nirspec_fs_refining import save_spectrum as _shared_save          # noqa: E402
@@ -548,6 +552,34 @@ def run_spec2(sci, bkg, asn_dir, spec2_dir, skip_bkg):
 # Stage 3
 # ===========================================================================
 
+def group_metas_by_epoch(metas, tag=None):
+    """Partition exposure metadata into {(tag, date): [meta, ...]}.
+
+    `collect_exposures` has already assigned every exposure an
+    `epoch_key` of (target, epoch number) and an `epoch_date`; this turns
+    that into the (tag, date) pair the directory layout uses, so one
+    proposal covering two targets lands in two directory trees.
+    """
+    groups = defaultdict(list)
+    for m in metas:
+        target = m["epoch_key"][0]
+        groups[(tag or sanitize(target) or "target", m["epoch_date"])].append(m)
+    return dict(sorted(groups.items()))
+
+
+def stage_epoch_uncal(metas, uncal_files, uncal_dir):
+    """Stage just this epoch's uncal files into its uncal/ directory."""
+    by_name = {os.path.basename(f): f for f in uncal_files}
+    wanted = []
+    for m in metas:
+        path = m.get("path")
+        if path and path.endswith("_uncal.fits") and os.path.exists(path):
+            wanted.append(path)
+        elif m["name"] in by_name:
+            wanted.append(by_name[m["name"]])
+    return stage_files(wanted, uncal_dir)
+
+
 def build_groups(sci, spec2_dir, tag):
     """One group per (target, epoch, slit); only exposures that produced a cal file."""
     grouped = defaultdict(list)
@@ -833,7 +865,8 @@ def main():
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--proposal", required=True, help="JWST proposal number, e.g. 1536")
-    p.add_argument("--outdir", default=None, help="Base output directory (default ./lrs_data_<proposal>[_tag])")
+    p.add_argument("--outdir", required=True,
+               help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     p.add_argument("--target", default=None, help="Only process science targets whose name contains this (case-insensitive)")
     p.add_argument("--tag", default=None, help="Appended to the output dir and to product / final-spectrum names")
     p.add_argument("--max-epoch-gap-days", type=float, default=1.0,
@@ -861,10 +894,14 @@ def main():
     proposal_num = int(args.proposal)
     padded = f"{proposal_num:05d}"
     tag = f"_{args.tag}" if args.tag else ""
-    outdir = os.path.abspath(args.outdir or f"./lrs_data_{padded}{tag}")   # absolute: association files need it
-    d = {k: os.path.join(outdir, k) for k in ("uncal", "stage1", "asn", "stage2", "stage3", "final_spectrum")}
-    for path in d.values():
-        os.makedirs(path, exist_ok=True)
+    outdir = os.path.abspath(args.outdir)   # absolute: association files need it
+    os.makedirs(outdir, exist_ok=True)
+
+    # Raw downloads stage here; epochs are only known once the headers have
+    # been read, after which each gets its own self-contained tree.
+    download_dir = os.path.join(outdir, "_downloaded_uncal")
+    os.makedirs(download_dir, exist_ok=True)
+
     print(f"JWST Calibration Pipeline version: {jwst.__version__}")
     print(f"Output directory: {outdir}")
     print(f"Spectrum writer: {'nirspec_fs_refining (same format as NIRSpec finals)' if _shared_save else 'built-in'}\n")
@@ -872,86 +909,113 @@ def main():
 
     # ---- files -----------------------------------------------------------
     manifest = os.path.join(outdir, "mast_uncal_manifest.txt")
-    uncal_count = None
     if args.list_mast:
         mast_login()
         list_mast_uncal(padded, proposal_num, manifest)
         return
     if args.skip_download or args.from_stage > 1:
-        uncal = sorted(glob.glob(os.path.join(d["uncal"], "*uncal.fits")))
+        uncal = find_staged_uncal(outdir, download_dir)
     else:
-        uncal = query_and_download(padded, proposal_num, d["uncal"], manifest)
+        uncal = query_and_download(padded, proposal_num, download_dir, manifest)
+    if not uncal:
+        raise SystemExit("No uncal files to process.")
 
-    sci_u = bkg_u = None
-    if args.plan_only or args.from_stage == 1:
-        if not uncal:
-            raise SystemExit("No uncal files to plan from.")
-        print_inventory(uncal, "Uncal files on disk (every EXP_TYPE / slit / target, before any filtering)")
-        sci_u, bkg_u, notes_u = collect_exposures(uncal, args.target, args.max_epoch_gap_days)
+    # ---- plan, on the uncal headers, before anything slow runs -----------
+    print_inventory(uncal, "Uncal files on disk (every EXP_TYPE / slit / target, "
+                            "before any filtering)")
+    sci_u, bkg_u, notes_u = collect_exposures(uncal, args.target, args.max_epoch_gap_days)
+    if not sci_u:
+        raise SystemExit("No LRS fixed-slit science exposures selected.")
+    plan = format_plan(sci_u, args.max_epoch_gap_days)
+    print(plan)
+    print_notes(notes_u)
+    with open(os.path.join(outdir, "epoch_plan.txt"), "w") as fh:
+        fh.write(plan + "\n")
+    if args.plan_only:
+        return
+
+    # ---- one self-contained directory tree per epoch ---------------------
+    # Splitting epochs here, on the uncal headers, keeps Stage 1 onwards
+    # inside the epoch's own tree, so nod-partner selection in Stage 2 and
+    # association building in Stage 3 cannot reach across visits.
+    epochs = group_metas_by_epoch(sci_u, args.tag)
+    bkg_by_epoch = group_metas_by_epoch(bkg_u, args.tag) if bkg_u else {}
+    print(f"\n{len(epochs)} epoch(s) to process\n")
+
+    all_finals = {}
+    for (tag_name, date), metas in epochs.items():
+        paths = ensure_epoch_tree(outdir, "MIRI-LRS", tag_name, date)
+        stem = paths["stem"]
+        epoch_bkg = bkg_by_epoch.get((tag_name, date), [])
+        print(f"=== {stem}: {len(metas)} science + {len(epoch_bkg)} background "
+              f"exposure(s) -> {os.path.relpath(paths['epoch'], outdir)}")
+
+        stage_epoch_uncal(metas + epoch_bkg, uncal, paths["uncal"])
         uncal_count = defaultdict(int)
-        for m in sci_u:
+        for m in metas:
             uncal_count[m["slit"]] += 1
-        print(format_plan(sci_u, args.max_epoch_gap_days))
-        print_notes(notes_u)
-        if args.plan_only:
-            return
-        if not sci_u:
-            raise SystemExit("No LRS fixed-slit science exposures selected.")
 
-    # ---- Stage 1 ---------------------------------------------------------
-    if args.from_stage == 1:
-        run_detector1(sci_u + bkg_u, d["stage1"], args.max_cores,
-                      find_showers=not args.no_shower_detection,
-                      rejection_threshold=args.jump_threshold, redo=args.redo)
-        print(f"Stage 1 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
+        # ---- Stage 1 -----------------------------------------------------
+        if args.from_stage == 1:
+            run_detector1(metas + epoch_bkg, paths["stage1"], args.max_cores,
+                          find_showers=not args.no_shower_detection,
+                          rejection_threshold=args.jump_threshold, redo=args.redo)
+            print(f"Stage 1 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
 
-    rate_files = sorted(glob.glob(os.path.join(d["stage1"], "*_rate.fits")))
-    if not rate_files:
-        raise SystemExit("No rate files in stage1/.")
+        rate_files = sorted(glob.glob(os.path.join(paths["stage1"], "*_rate.fits")))
+        if not rate_files:
+            print(f"  WARNING: no rate files in {stem}/stage1 -- skipping epoch.")
+            continue
 
-    sci, bkg, notes = collect_exposures(rate_files, args.target, args.max_epoch_gap_days)
-    if uncal_count:
+        sci, bkg, notes = collect_exposures(rate_files, args.target,
+                                             args.max_epoch_gap_days)
+        print_notes(notes)
         rate_count = defaultdict(int)
         for m in sci:
             rate_count[m["slit"]] += 1
         for sl, n in sorted(uncal_count.items()):
             if rate_count.get(sl, 0) < n:
-                print(f"  !! slit {sl}: {n} uncal exposure(s) but only {rate_count.get(sl, 0)} rate file(s) -- "
-                      f"Stage 1 lost {n - rate_count.get(sl, 0)} (see FAILURES at the end)")
-    plan = format_plan(sci, args.max_epoch_gap_days)
-    print(plan)
-    print_notes(notes)
-    with open(os.path.join(outdir, "epoch_plan.txt"), "w") as fh:
-        fh.write(plan + "\n")
-    print(f"\n{len(sci)} science and {len(bkg)} dedicated-background exposure(s).\n")
-    if not sci:
-        raise SystemExit("No science exposures selected.")
+                print(f"  !! slit {sl}: {n} uncal exposure(s) but only "
+                      f"{rate_count.get(sl, 0)} rate file(s) -- Stage 1 lost "
+                      f"{n - rate_count.get(sl, 0)} (see FAILURES at the end)")
+        print(f"  {len(sci)} science and {len(bkg)} dedicated-background exposure(s).")
+        if not sci:
+            print(f"  WARNING: no science exposures selected for {stem} -- skipping.")
+            continue
 
-    # ---- Stage 2 ---------------------------------------------------------
-    if args.from_stage <= 2:
-        run_spec2(sci, bkg, d["asn"], d["stage2"], args.no_bkg)
-        print(f"Stage 2 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
+        # ---- Stage 2 -----------------------------------------------------
+        if args.from_stage <= 2:
+            run_spec2(sci, bkg, paths["asn"], paths["stage2"], args.no_bkg)
+            print(f"Stage 2 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
 
-    groups = build_groups(sci, d["stage2"], tag)
-    if not groups:
-        raise SystemExit("No Stage-2 cal files found for the selected exposures.")
+        groups = build_groups(sci, paths["stage2"], tag)
+        if not groups:
+            print(f"  WARNING: no Stage-2 cal files for {stem} -- skipping.")
+            continue
 
-    # ---- Stage 3 ---------------------------------------------------------
-    if args.from_stage <= 3:
-        run_spec3(groups, d["asn"], d["stage3"], args.no_pixel_replace, args.optimal_extraction)
-        print(f"Stage 3 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
+        # ---- Stage 3 -----------------------------------------------------
+        if args.from_stage <= 3:
+            run_spec3(groups, paths["asn"], paths["stage3"], args.no_pixel_replace,
+                      args.optimal_extraction)
+            print(f"Stage 3 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
 
-    # ---- final -----------------------------------------------------------
-    finals = build_final_spectra(groups, d["stage3"], d["final_spectrum"], tag, args.optimal_extraction,
-                                 dq_strict=not args.dq_loose)
-    print_funnel(uncal_count, sci, d["stage2"], groups, finals, d["stage3"])
+        # ---- final -------------------------------------------------------
+        finals = build_final_spectra(groups, paths["stage3"], paths["final"], tag,
+                                      args.optimal_extraction,
+                                      dq_strict=not args.dq_loose)
+        print_funnel(uncal_count, sci, paths["stage2"], groups, finals, paths["stage3"])
+        for key, path in finals.items():
+            ecsv = path[:-5] + ".ecsv" if path.endswith(".fits") else path
+            record_product(outdir, "MIRI-LRS", tag_name, date, ecsv,
+                            product="final", level="final",
+                            fits_path=path, quiet=True)
+        all_finals.update({f"{stem} {k}": v for k, v in finals.items()})
 
     print(f"\nAll done ({(time.perf_counter() - t0) / 60:.1f} min).")
-    print(f"  per-exposure spectra (Stage 2): {d['stage2']}")
-    print(f"  per-epoch Stage-3 products: {d['stage3']}")
-    print(f"  final spectra: {d['final_spectrum']}")
-    for k, v in finals.items():
-        print(f"    {k}: {v}")
+    print(f"  output directory: {outdir}")
+    print(f"  product index:    {os.path.join(outdir, MANIFEST_NAME)}")
+    for k, v in sorted(all_finals.items()):
+        print(f"    {k}: {os.path.relpath(v, outdir)}")
 
 
 if __name__ == "__main__":

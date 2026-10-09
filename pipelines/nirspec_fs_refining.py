@@ -426,14 +426,14 @@ def stitch(pieces, verbose=True):
 
 
 def save_spectrum(out_base, wave, flux, err, unit, meta=None):
-    """Write <out_base>.ecsv and <out_base>.fits (wavelength, flux, flux_err)."""
+    """Write <out_base>.ecsv and <out_base>.fits (WAVELENGTH, FLUX, FLUX_ERROR)."""
     os.makedirs(os.path.dirname(os.path.abspath(out_base)), exist_ok=True)
-    t = Table({"wavelength": wave, "flux": flux, "flux_err": err})
-    t["wavelength"].unit = "um"
-    t["flux"].unit = unit
-    t["flux_err"].unit = unit
+    # Canonical upper-case columns (jspec.columns) -- this used to write
+    # lower-case "wavelength"/"flux"/"flux_err", which disagreed with
+    # every other pipeline and with the x1d tables themselves.
+    from jspec.columns import spectrum_table
     meta = {k: v for k, v in (meta or {}).items() if v is not None}
-    t.meta.update(meta)
+    t = spectrum_table(wave, flux, err, unit=unit, meta=meta)
     t.write(out_base + ".ecsv", format="ascii.ecsv", overwrite=True)
     t.meta = {k: v for k, v in meta.items() if len(k) <= 8 and len(str(v)) < 60}
     with warnings.catch_warnings():

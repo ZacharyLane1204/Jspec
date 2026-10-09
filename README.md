@@ -41,55 +41,86 @@ Every section is a step in one continuous workflow.
 
 ## 1. Install
 
-This repository is laid out *flat*: the repository root **is** the `jspec`
-package. Install it in editable mode so `import jspec` works from anywhere,
-regardless of what you named the directory you cloned into:
+### One environment for everything
+
+`environment.yml` builds a single conda environment, `jspec`, that holds the
+JWST calibration pipeline, MRS-PFPC, AstroBkgInterp and the analysis stack
+together:
 
 ```bash
 git clone <this repo> jspec
 cd jspec
-conda activate jwst_pipeline        # or whatever your environment is called
+conda env create -f environment.yml
+conda activate jspec
 pip install -e .
 ```
 
-That gives you the `jspec` command and the `jspec` importable package.
+That last line matters. This repository is laid out *flat* — the repository
+root **is** the `jspec` package — and the editable install is what makes
+`import jspec` work from anywhere, regardless of what you named the
+directory you cloned into. It is deliberately not listed in
+`environment.yml`, so that your working copy is what gets imported rather
+than a frozen snapshot.
+
 Check it:
 
 ```bash
 jspec --help
 python -c "import jspec; print(jspec.__version__)"
+python -c "import jwst, dynesty, AstroBkgInterp, MRS_PFPC; print('reduction stack OK')"
+pfpc_proc --help
 ```
 
-### Dependencies
-
-The analysis layer needs only `numpy`, `scipy`, `astropy`, `matplotlib` and
-`pandas`, which `pip install -e .` will pull in. Three optional extras cover
-the heavier parts:
+To update an existing environment after pulling:
 
 ```bash
-pip install -e ".[fit]"          # dynesty, for `jspec fit`
-pip install -e ".[metallicity]"  # pyneb, better emissivities
-pip install -e ".[pipelines]"    # jwst, crds, astroquery, AstroBkgInterp
-pip install -e ".[all]"          # everything
+conda env update -f environment.yml --prune
 ```
 
-If you already work in a JWST environment you almost certainly have the
-`pipelines` extras. The two usually missing are:
+**If you previously had separate `jwst_pipeline` and `mrs_pfpc`
+environments**, you no longer need them. The old two-environment split meant
+switching conda environments partway through an MRS reduction, which is easy
+to get wrong and was the reason the standalone log-quieting wrapper existed.
+Both package sets are compatible and are now installed together.
 
-```bash
-pip install dynesty      # required for `jspec fit` — it will not work without this
-pip install pyneb        # optional; jspec.metallicity falls back without it
-```
+### What is in there, and why
 
-Missing `dynesty` raises a clear error the first time you fit. Missing
-`pyneb` is not an error — `jspec.metallicity` uses built-in low-density
-Tₑ=10⁴ K emissivities and says so in every result's `caveats` list.
+| Piece | Comes from | Needed for |
+|---|---|---|
+| `python=3.13` | conda-forge | The newest version the JWST pipeline supports |
+| `jwst`, `crds`, `stpipe`, `stcal` | pip | Stages 1–3 of every reduction |
+| `astroquery` | pip | Downloading from MAST |
+| `AstroBkgInterp` | GitHub | Source-masked background estimation in both IFU pipelines |
+| `MRS-PFPC` | GitHub | MIRI MRS point-source fringe + photometric correction (Route B) |
+| `dynesty` | pip | `jspec fit` — nested-sampling profile fits |
+| `pyneb` | pip | Better emissivities in `jspec.metallicity` |
+| `sep`, `photutils`, `scikit-image` | conda-forge | Compiled; source detection and background work |
+| `jupyterlab`, `ipympl` | conda-forge | A reduction almost always ends in a notebook |
+
+Two of those have no PyPI release and are installed straight from GitHub, so
+`pip install jspec[pipelines]` **cannot** reproduce this environment. Use
+`environment.yml`.
+
+Python is pinned to 3.13 rather than left free because the JWST pipeline
+publishes wheels for a narrow range of versions; anything newer silently
+falls back to building from source or fails to resolve.
 
 ### Do you even need the reduction half?
 
 If somebody has already given you a 1-D spectrum (`.ecsv`, `.csv`, `.txt` or
 an `x1d.fits`), skip to [step 5](#5-stitch-the-segments-into-one-spectrum).
-Everything from there on works without `jwst` or `crds` installed.
+Everything from there on needs only `numpy`, `scipy`, `astropy`,
+`matplotlib` and `pandas`, so a plain `pip install -e .` into any
+environment is enough — no `jwst`, no `crds`, no conda.
+
+```bash
+pip install -e ".[fit]"          # adds dynesty, for `jspec fit`
+pip install -e ".[metallicity]"  # adds pyneb, better emissivities
+```
+
+Missing `dynesty` raises a clear error the first time you fit. Missing
+`pyneb` is not an error — `jspec.metallicity` uses built-in low-density
+Tₑ=10⁴ K emissivities and says so in every result's `caveats` list.
 
 ---
 
@@ -98,13 +129,19 @@ Everything from there on works without `jwst` or `crds` installed.
 ```
   MAST                                    (proposal ID, target name)
     |
-    |  download + Stage 1/2/3             jspec/pipelines/*
+    |  download                           -> <outdir>/_downloaded_uncal/
+    |  group by observation date          jspec.layout / jspec.epochs
     v
-  uncal -> rate -> cal -> s3d -> x1d      one set per epoch, per band
+  one self-contained directory per (instrument, epoch)
     |
-    |  group by observation date          jspec.epochs      / jspec epochs
+    |  Stage 1 / 2 / 3, inside that dir   jspec/pipelines/*
     v
-  one group of segments per epoch
+  uncal -> rate -> cal -> s3d -> x1d
+    |
+    |  re-extract, combine sub-bands      -> .../final/
+    |  record what was produced           -> <outdir>/products.csv
+    v
+  ONE recommended 1-D product per epoch
     |
     |  solve scales, blend overlaps       jspec.stitch      / jspec stitch
     v
@@ -122,13 +159,64 @@ Everything from there on works without `jwst` or `crds` installed.
   velocities, widths, fluxes, plots
 ```
 
-Each arrow is one command. The whole thing, for one target, is roughly:
+### Where everything lands
+
+Every reduction pipeline writes into the same tree, below a single
+`--outdir` that you choose:
+
+```
+<outdir>/
+├── products.csv                  <- index of every final product (see 3.5)
+├── _downloaded_uncal/            <- raw MAST downloads, shared by all epochs
+├── MIRI-MRS/
+│   ├── SN2024aecx_2025-01-17/
+│   │   ├── uncal/                <- symlinks into _downloaded_uncal
+│   │   ├── stage1/               <- *_rate.fits
+│   │   ├── asn/                  <- association files
+│   │   ├── stage2/               <- *_cal.fits
+│   │   ├── stage3/               <- *_s3d.fits, *_x1d.fits
+│   │   ├── reextract/            <- AstroBkgInterp re-extraction
+│   │   └── final/                <- the spectrum you analyse
+│   └── SN2024aecx_2025-06-01/
+│       └── ...
+└── NIRSpec-FS/
+    └── SN2024aecx_2025-06-01/
+        └── ...
+```
+
+Three things follow from this, and they are the point of it:
+
+- **An epoch directory is self-contained.** A Stage-3 association is built
+  from one directory, so it physically cannot span two visits. That failure
+  mode — averaging June and December together — produces no error and no
+  visibly wrong output, which is why it is designed out rather than checked
+  for.
+- **Instrument comes before epoch**, so `<outdir>/MIRI-MRS/` and
+  `<outdir>/NIRSpec-FS/` sit side by side for the same target and the same
+  dates, ready to be stitched together.
+- **Uncal files are downloaded once** into `_downloaded_uncal/` and
+  *symlinked* into each epoch, so re-running does not duplicate tens of GB.
+  If symlinks are unavailable the pipelines fall back to copying.
+
+`<TAG>` defaults to a sanitised version of the target name; `--tag`
+overrides it, which is how you keep two parameter choices side by side
+without overwriting each other. The date is always `YYYY-MM-DD`.
+
+`jspec.layout` is the single source of truth for all of this — no pipeline
+builds a path by hand.
+
+### The short version
 
 ```bash
-python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 --outdir SN2024aecx/ --max-cores half
-python -m jspec.pipelines.abi_reextract_pfpc     --level3-dir SN2024aecx/stage3 --outdir SN2024aecx/reex/2025-06-01 --product-name SN2024AECX_2025-06-01
-jspec epochs "SN2024aecx/*/reex/*_x1d.fits"
-jspec stitch "SN2024aecx/*/reex/*_x1d.fits" -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
+# Reduce (one command per instrument; each handles all epochs in the proposal)
+python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 --outdir SN2024aecx --max-cores half
+python -m jspec.pipelines.abi_reextract_pfpc     --outdir SN2024aecx
+
+# What did that produce?
+jspec products SN2024aecx
+
+# Analyse
+jspec stitch "SN2024aecx/*/*_2025-06-01/final/*.ecsv" -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
 jspec detect SN2024aecx_2025-06-01.ecsv -z 0.002665 -o features.ecsv
 jspec plot   SN2024aecx_2025-06-01.ecsv -z 0.002665 --bands --features -o spectrum.png
 jspec fit    SN2024aecx_2025-06-01.ecsv -z 0.002665 --line 12.814 --select
@@ -173,25 +261,41 @@ existing cubes and so takes minutes rather than hours.
 
 ### 3.1 MIRI MRS
 
-**You do not run this once per epoch.** `miri_mrs_auto_pipeline` is already
-epoch-aware: after Stage 2 it calls `get_epoch_groups()`, which clusters the
-calibrated exposures by `(TARGNAME, epoch)` and builds a *separate Stage-3
-association per group*. A proposal with one target observed four times gives
-you four Level-3 cubes, named `<TARGNAME>_<epoch-date>`:
+There are two routes. **Route A** (this section) is the standard pipeline
+plus an AstroBkgInterp re-extraction. **Route B**
+([3.1.0](#310-route-b-mrs-pfpc)) swaps Stages 1–3 for MRS-PFPC, which
+additionally applies a point-source fringe and photometric correction. Both
+end in the same place: `abi_reextract_pfpc` writing a combined spectrum to
+each epoch's `final/`.
+
+**You do not run this once per epoch.** `miri_mrs_auto_pipeline` is
+epoch-aware: it reads the observation dates out of the *uncal* headers
+before processing anything, builds one directory per `(target, epoch)`, and
+runs Stages 1–3 separately inside each. A proposal with one target observed
+four times gives you four epoch trees:
 
 ```
 4 (target, epoch) group(s) across 1 target(s) (>1.0 day gap = new epoch)
-  SN2024AECX_2025-01-17  SN2024AECX_2025-06-01
-  SN2024AECX_2025-12-07  SN2024AECX_2025-12-28
+  SN2024aecx_2025-01-17  SN2024aecx_2025-06-01
+  SN2024aecx_2025-12-07  SN2024aecx_2025-12-28
 ```
+
+> Grouping happens on uncal rather than after Stage 2 so that no stage ever
+> sees two epochs at once. Grouping later would still produce correct
+> Level-3 associations, but the intermediate products would be mixed in one
+> directory and a restart could pick up the wrong ones.
 
 So the normal MRS run is one command for the whole proposal:
 
 ```bash
 python -m jspec.pipelines.miri_mrs_auto_pipeline \
-    --proposal 9233 --outdir SN2024aecx/ \
+    --proposal 9233 --outdir SN2024aecx \
     --max-epoch-gap-days 1.0 --max-cores half
 ```
+
+`--outdir` is **required** on every auto-pipeline. There is no default,
+because a default would put a 27 GB reduction wherever you happened to be
+standing.
 
 Note what is *not* in that command: no `--ra/--dec`, and no aperture or
 background options. The defaults are the recommended values, and the source
@@ -199,40 +303,107 @@ position is found automatically — see
 [3.1.1](#311-what-if-i-do-not-have-a-refined-ra-and-dec-yet) and
 [3.1.2](#312-choosing-the-background-and-aperture-options) below.
 
-Then re-extract and combine, **per epoch**:
+Then produce the final spectrum. One command covers every MIRI-MRS epoch in
+the tree:
 
 ```bash
-# Re-extract one epoch's cube (this is the recommended extraction).
-python -m jspec.pipelines.abi_reextract_pfpc \
-    --level3-dir SN2024aecx/stage3 \
-    --outdir     SN2024aecx/reextract/2025-06-01 \
-    --product-name SN2024AECX_2025-06-01 \
-    --fwhm-scale 2.5
-
-# Combine the twelve MRS sub-bands within that epoch.
-python -m jspec.pipelines.combine_epoch_spectra \
-    --indir SN2024aecx/reextract/2025-06-01 \
-    --pattern "*_x1d.fits" --outdir combined_spectra --max-gap-days 1.0
+python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx
 ```
 
-`--product-name` is what selects the epoch: pass the Level-3 product name
-the previous step printed.
+For each epoch this finds the Level-3 cubes, re-extracts every sub-band with
+AstroBkgInterp, combines the twelve sub-bands into one spectrum, copies it
+into `final/`, and records it in `products.csv` as the **recommended**
+product for that epoch. Narrow it with `--date 2025-06-01` or `--tag`, or
+point it at an arbitrary directory with `--level3-dir` + `--product-name`.
+
+The result:
+
+```
+SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/
+├── reextract/   SN2024aecx_2025-06-01_ch1-short_x1d.fits  (×12)
+│                SN2024aecx_2025-06-01_abi_combined.ecsv
+└── final/       SN2024aecx_2025-06-01_abi_combined.ecsv   <- use this one
+```
 
 To narrow a run rather than process everything, use `--dataset` (specific
-observations) or `--tag` (appended to product names, so parallel runs with
+observations) or `--tag` (changes the directory name, so parallel runs with
 different settings do not overwrite each other). Restart options
 (`--skip-download`, `--from-stage3`, `--redo`) are in
-[3.4](#34-restarting-without-redoing-everything).
+[3.7](#37-restarting-without-redoing-everything).
 
-> **The other route.** `prepare_mrs_pfpc_epochs` is for the *separate*
-> MRS-PFPC `pfpc_proc` workflow, not for the pipeline above. `pfpc_proc`
-> runs Stage 1–3 as a single call and names its products after whatever
-> directory you point it at, so it has no hook for epoch-aware association
-> building. That script therefore downloads the uncal files and symlinks
-> them into one subdirectory per epoch, so the separation falls out of the
-> product naming. You then run `pfpc_proc` yourself once per printed
-> subdirectory. Use this only if you are using PFPC; otherwise
-> `miri_mrs_auto_pipeline` already does the epoch handling for you.
+#### 3.1.0 Route B: MRS-PFPC
+
+[MRS-PFPC](https://github.com/STScI-MIRI/MRS-PFPC) applies a point-source
+fringe and photometric correction that the standard pipeline does not. Use
+it *instead of* Route A's Stages 1–3, not in addition.
+
+It is installed by `environment.yml`, so there is no environment switching
+any more. The chain is four commands:
+
+```bash
+# 1. Download and lay out one directory per epoch.
+python -m jspec.pipelines.prepare_mrs_pfpc_epochs \
+    --proposal 9233 --outdir SN2024aecx --max-gap-days 1.0
+
+# 2. Reduce and correct, once per epoch. The cd is required (see below).
+cd SN2024aecx/MIRI-MRS
+pfpc_proc SN2024aecx_2025-06-01 && pfpc_cor SN2024aecx_2025-06-01
+cd ../..
+
+# 3. Sort PFPC's flat output dump into the standard layout.
+python -m jspec.pipelines.import_pfpc_products --outdir SN2024aecx
+
+# 4. Re-extract and combine, exactly as in Route A.
+python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx
+```
+
+Step 1 prints the exact step-2 commands for the epochs it found, so you do
+not have to type the directory names.
+
+**Why step 3 exists.** MRS-PFPC writes everything — uncal, rate, cal, s3d,
+x1d, corrected x1d — into one flat directory alongside the inputs, with no
+stage subdirectories. `import_pfpc_products` moves each file into the right
+place (`stage1/`, `stage2/`, `stage3/`, and the corrected spectra into
+`pfpc/`), removes the flat uncal duplicates once it has confirmed they are
+also in `uncal/`, and records what it found. Use `--dry-run` to see the plan
+without moving anything. Re-running it is harmless.
+
+Three things about `pfpc_proc` that are easy to get wrong:
+
+- **The `cd` is required, and the argument must be a bare directory name.**
+  `pfpc_proc` resolves its argument as `"<objname>/"` relative to the current
+  directory, with no option to point elsewhere. Passing a *path*
+  (`pfpc_proc SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01`) appears to work —
+  Detector1 and Spec2 run normally — but the slash ends up inside the
+  Level-3 product name, so Spec3 tries to save to a subdirectory that does
+  not exist. stpipe creates `output_dir` but not a directory implied by a
+  product name, so the run fails at the save step, *after* Detector1, Spec2
+  and Spec3 have all finished. Always `cd` first.
+- **The directory name becomes the product name.** Stage 3 is written as
+  `<dirname>_level3_ch1-short_s3d.fits`, and `pfpc_cor` then looks for
+  exactly `<dirname>/<dirname>_level3_ch*-*_x1d.fits`. So do not rename an
+  epoch directory once you have started: it silently stops matching. This is
+  why `prepare_mrs_pfpc_epochs` places the uncal files *both* flat in the
+  epoch directory (where `pfpc_proc`'s glob can see them, and so that the
+  product name comes out as `<TAG>_<DATE>_...`) and in `uncal/`.
+- **`pfpc_proc` has no skip-if-exists logic.** Restarting reprocesses
+  Detector1 from scratch unless you pass `--det1skip`.
+
+`pfpc_cor` writes `<dirname>_pfpc_ch<N>-<band>_x1d.fits` — twelve files, one
+per sub-band. **Those are the spectra to use**, not the `_level3_` ones,
+which are uncorrected; `import_pfpc_products` files them under `pfpc/` and
+`abi_reextract_pfpc` prefers that directory automatically. Useful flags:
+`--dithsub` (pair dither subtraction, and it must be passed to *both*
+`pfpc_proc` and `pfpc_cor`), `--png`/`--pdf` for the diagnostic plot,
+`--chan N` to inspect one channel.
+
+Because each epoch is a separate directory, epochs cannot mix — which is the
+whole point of step 1. `pfpc_proc` has no epoch awareness of its own; it
+globs every `jw*mirifu*uncal.fits` it finds and puts them all in one Level-3
+association.
+
+After step 4 you rejoin the normal flow at
+[section 5 (stitching)](#5-stitch-the-segments-into-one-spectrum).
 
 #### 3.1.1 What if I do not have a refined RA and Dec yet?
 
@@ -275,11 +446,12 @@ The refinement path, once you have a first cube:
 
 ```bash
 # Get RA/Dec (or pixel coords) from an existing cube.
-python -m jspec.pipelines.get_source_radec --cube SN2024aecx/stage3/..._s3d.fits
+python -m jspec.pipelines.get_source_radec \
+    --cube SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/stage3/*_ch1-short_s3d.fits
 
 # Re-run only the post-Stage-3 part with the refined position.
 python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 \
-    --outdir SN2024aecx/ --from-stage3 --dataset <one-obs> \
+    --outdir SN2024aecx --from-stage3 --dataset <one-obs> \
     --ra 123.456 --dec -12.345
 ```
 
@@ -295,17 +467,22 @@ Short version: **the defaults are the recommended values.** The long option
 string in older notes is unnecessary, and one of those options does nothing
 for cubes.
 
-| Option | Default | What it actually controls |
-|---|---|---|
-| `--fwhm-scale` | 2.5 | **The real aperture knob.** Source-mask radius per slice = `ceil(fwhm_scale × FWHM(λ))` |
-| `--min-aper-rad` | 5 px | Floor on that radius, for the blue end where the PSF is narrow |
-| `--aper-rad` | 7 px | **Ignored for cubes.** 2-D input only |
-| `--ann-width` | 6 px | Width of the annulus sampled for background under the masked source |
-| `--bkg-mode` | `polynomial` | `polynomial` or `simple`. These are the only two AstroBkgInterp implements — there is no "skip" |
-| `--poly-k` | 3 | Degree of the 2-D polynomial (polynomial mode) |
-| `--bin-size` | 9 px | Sliding-window size for that fit |
-| `--cube-resolution` | `high` | Sampling density of the fit |
-| `--pool-size` | cores−1 | Main lever on runtime; AstroBkgInterp is otherwise single-threaded per cube |
+| Option | Default | Where | What it actually controls |
+|---|---|---|---|
+| `--fwhm-scale` | 2.5 | both | **The real aperture knob.** Source-mask radius per slice = `ceil(fwhm_scale × FWHM(λ))` |
+| `--min-aper-rad` | 5 px | both | Floor on that radius, for the blue end where the PSF is narrow |
+| `--aper-rad` | 7 px | mrs | **Ignored for cubes.** 2-D input only |
+| `--ann-width` | 6 px | mrs | Width of the annulus sampled for background under the masked source |
+| `--bkg-mode` | `polynomial` | both | `polynomial` or `simple`. These are the only two AstroBkgInterp implements — there is no "skip" |
+| `--poly-k` | 3 | both | Degree of the 2-D polynomial (polynomial mode) |
+| `--bin-size` | 9 px | both | Sliding-window size for that fit |
+| `--cube-resolution` | `high` | mrs | Sampling density of the fit |
+| `--pool-size` | cores−1 | mrs | Main lever on runtime; AstroBkgInterp is otherwise single-threaded per cube |
+
+"Where" is `mrs` for `miri_mrs_auto_pipeline` only, `both` for that and
+`abi_reextract_pfpc`. `abi_reextract_pfpc` additionally takes
+`--channel-overrides`, inline JSON that sets any of these per MRS channel —
+useful because channel 4 usually wants a gentler fit than channel 1.
 
 **`--aper-rad` is a trap.** AstroBkgInterp overrides it in cube mode,
 recomputing the radius per wavelength slice from the PSF FWHM. Setting
@@ -352,8 +529,62 @@ background structure but is noisier. 9 px is a reasonable middle for MRS.
 > fit coefficients, inflating the cube's ERR by ~5 orders of magnitude and
 > making every downstream error bar meaningless. This pipeline estimates the
 > background-model uncertainty from the actual residual scatter instead.
-> `--use-abi-err` restores the broken behaviour and exists only for
-> reproducing old runs. Do not use it.
+> `--use-abi-err` (on `miri_mrs_auto_pipeline`, or via
+> `--channel-overrides` on `abi_reextract_pfpc`) restores the broken
+> behaviour and exists only for reproducing old runs. Do not use it.
+
+#### 3.1.3 Turning down the log output
+
+By default the console shows only this pipeline's own progress output and
+tqdm bars; jwst, stpipe, stcal and CRDS are held to WARNING. `--verbose`
+restores the full per-step firehose, and `--log-file run.log` keeps that
+detail on disk while leaving the terminal clean:
+
+```bash
+python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 \
+    --outdir SN2024aecx/ --skip-download --log-file SN2024aecx/run.log
+```
+
+If you are writing your own script against `jwst`, note that the obvious
+`logging.getLogger("stpipe").setLevel(logging.WARNING)` does **not** work.
+stpipe reconfigures those loggers back to INFO on the first `Step.call()`,
+unless a configuration has already been applied. `jspec.pipelines.jwst_logging`
+handles that, and is usable on its own:
+
+```python
+from jspec.pipelines.jwst_logging import configure_jwst_logging
+configure_jwst_logging("WARNING")   # before any pipeline step runs
+```
+
+It also covers `stcal` and `tweakwcs`, which are missed by the usual
+`("jwst", "stpipe", "CRDS")` list — `stcal` is where the
+`dark_current.dark_sub` "Science data nints=..." lines come from.
+
+The level is recorded in `JSPEC_JWST_LOG_LEVEL` as well as applied. That
+matters on macOS and Windows, where multiprocessing uses "spawn": the steps
+that parallelise (jump detection, ramp fitting — *"Creating 4 processes for
+jump detection"*) start children that re-import the module but never run
+`main()`, and those children write to the same terminal you do. Environment
+variables survive spawn, so the children pick the level up on import.
+
+> **Changing this mid-run has no effect.** A running process already holds
+> the old module in memory. You have to restart it.
+
+This covers `jspec`'s own pipelines. Third-party jwst tools — MRS-PFPC's
+`pfpc_proc` and `pfpc_cor` — do their own logging, so none of the above
+reaches them. Use the standalone wrapper for those:
+
+```bash
+cd SN2024aecx/MIRI-MRS
+python /path/to/JSpec/pipelines/run_quiet.py pfpc_proc SN2024aecx_2025-06-01
+python /path/to/JSpec/pipelines/run_quiet.py --log-file pfpc.log pfpc_cor SN2024aecx_2025-06-01
+```
+
+It looks the command up in the active environment's console scripts and runs
+it in-process with logging configured first. `--verbose` and `--log-file`
+work as above, and arguments after the command name pass straight through.
+It needs nothing installed beyond `jwst` itself, so it still works if you
+have kept a separate MRS-PFPC environment around.
 
 > **Multiprocessing caveat.** Run `miri_mrs_auto_pipeline` and
 > `nirspec_ifu_auto_pipeline` from a real script guarded by
@@ -367,42 +598,147 @@ background structure but is noisier. 9 px is a reasonable middle for MRS.
 ```bash
 # Plan first. This prints the epoch grouping and exits without processing.
 python -m jspec.pipelines.nirspec_fs_auto_pipeline \
-    --proposal 9233 --target SN2024aecx --max-epoch-gap-days 1.0 --plan-only
+    --proposal 9233 --target SN2024aecx --outdir SN2024aecx \
+    --max-epoch-gap-days 1.0 --plan-only
 
 # Happy with the grouping? Run it.
 python -m jspec.pipelines.nirspec_fs_auto_pipeline \
-    --proposal 9233 --target SN2024aecx --max-epoch-gap-days 1.0 \
-    --source-type POINT --max-cores half
+    --proposal 9233 --target SN2024aecx --outdir SN2024aecx \
+    --max-epoch-gap-days 1.0 --source-type POINT --max-cores half
 
 # Optional refinement of the extraction.
 python -m jspec.pipelines.nirspec_fs_refining --help
 ```
 
+Use the **same `--outdir`** as the MRS run. The results land in
+`SN2024aecx/NIRSpec-FS/<TAG>_<DATE>/` beside the MIRI ones, which is what
+lets `jspec stitch` solve a single 1.7–28 µm spectrum per epoch later.
+
+`--plan-only` writes `epoch_plan.txt` into `--outdir` and exits before
+downloading anything, so it is cheap to run first and worth doing.
+
+> Nod-pair subtraction in Stage 2 now chooses partners from within one epoch
+> only. Previously it searched every exposure in the run, which could pair a
+> June nod with a December one on a target observed at the same dither
+> offsets.
+
 ### 3.3 NIRSpec IFU
 
 ```bash
 python -m jspec.pipelines.nirspec_ifu_auto_pipeline \
-    --proposal 9233 --outdir SN2024aecx/nrs_ifu \
+    --proposal 9233 --outdir SN2024aecx \
     --max-epoch-gap-days 1.0 --output-type band --max-cores half
 
 python -m jspec.pipelines.nirspec_refine_extract --help
 ```
+
+Again, the same `--outdir`; products appear under
+`SN2024aecx/NIRSpec-IFU/<TAG>_<DATE>/`.
 
 `--output-type band` produces one product per grating/filter band, which is
 what you want: `jspec stitch` works best with the finest segmentation you
 can give it, because every extra overlap is another constraint in the scale
 solve.
 
-### 3.4 Restarting without redoing everything
+### 3.4 MIRI LRS fixed slit
+
+```bash
+python -m jspec.pipelines.miri_lrs_fs_auto_pipeline \
+    --proposal 9233 --target SN2024aecx --outdir SN2024aecx \
+    --max-epoch-gap-days 1.0 --max-cores half
+```
+
+Dedicated background exposures, where the programme took them, are grouped
+into the same epoch as the science and used for that epoch only.
+
+### 3.5 What did all that produce?
+
+Every pipeline records its final products in `<outdir>/products.csv`, so you
+never have to work out by hand which of the files in a 27 GB tree is the one
+to analyse:
+
+```bash
+jspec products SN2024aecx
+```
+
+```
+2 product(s) indexed in SN2024aecx/products.csv
+* MIRI-MRS    SN2024aecx_2025-06-01  abi_combined   5.0000-28.0000 um   MIRI-MRS/SN2024aecx_2025-06-01/final/SN2024aecx_2025-06-01_abi_combined.ecsv
+  MIRI-MRS    SN2024aecx_2025-06-01  x1d            5.0000-28.0000 um   MIRI-MRS/SN2024aecx_2025-06-01/stage3/SN2024aecx_2025-06-01_x1d.fits
+* NIRSpec-FS  SN2024aecx_2025-06-01  final          0.6000-5.3000 um    NIRSpec-FS/SN2024aecx_2025-06-01/final/SN2024aecx_2025-06-01_final.ecsv
+
+* = recommended product to analyse for this instrument/epoch
+```
+
+The `*` is the useful part. Several Level-3 products exist per epoch — the
+standard pipeline `x1d`, the AstroBkgInterp re-extraction, the combined
+spectrum — and the one you want is not always the newest or the largest. For
+MIRI MRS and NIRSpec IFU it is the `abi_combined` spectrum; for the fixed
+slits it is `final`. The standard `x1d` is recorded too, unflagged, so you
+can compare against it when something looks wrong.
+
+Useful options:
+
+```bash
+jspec products SN2024aecx --recommended         # only the starred rows
+jspec products SN2024aecx --instrument MIRI-MRS # one instrument
+jspec products SN2024aecx --rebuild             # rescan the tree from scratch
+```
+
+`--rebuild` is the repair command: it walks every epoch directory, re-reads
+each product's wavelength range and row count, and rewrites the index. Use
+it after moving files around, or if a run died partway and left the index
+stale.
+
+The CSV itself has one row per product, with columns `instrument, target,
+date, epoch, level, product, recommended, path, fits_path, n_rows,
+wave_min_um, wave_max_um, mjd, updated`. Paths are relative to `--outdir`,
+so the whole tree stays movable. In Python:
+
+```python
+from jspec.manifest import read_manifest
+rows = [r for r in read_manifest("SN2024aecx") if r["recommended"] == "yes"]
+```
+
+### 3.6 A note on column names
+
+Every 1-D spectrum `jspec` writes — ECSV or FITS — uses **uppercase**
+column names, matching the convention in JWST `x1d` files:
+
+| Column | Meaning |
+|---|---|
+| `WAVELENGTH` | Observed-frame vacuum wavelength, µm |
+| `FLUX` | Flux density, unit recorded on the column |
+| `FLUX_ERROR` | 1-σ uncertainty, same unit as `FLUX` |
+| `SURF_BRIGHT`, `SB_ERROR` | Surface brightness, where applicable |
+| `DQ` | Data quality flags |
+
+Older `jspec` output used lowercase `wavelength`/`flux`/`flux_err` in some
+pipelines and uppercase in others. **Readers accept both**, so nothing you
+already have stops working; only new files are affected. If you want to
+normalise an old file in place:
+
+```python
+from astropy.table import Table
+from jspec.columns import normalize_columns
+t = normalize_columns(Table.read("old.ecsv"))
+t.write("old.ecsv", format="ascii.ecsv", overwrite=True)
+```
+
+### 3.7 Restarting without redoing everything
 
 All the auto-pipelines can resume:
 
 ```bash
---skip-download     # the uncal files are already on disk
+--skip-download     # the uncal files are already in _downloaded_uncal/
 --from-stage3       # rate/cal products exist, re-run Stage 3 only
 --from-stage 2      # (NIRSpec FS) start at a given stage number
 --redo              # ignore existing products and recompute
 ```
+
+Because epoch directories are self-contained, a restart picks up exactly the
+products belonging to that epoch and cannot accidentally reuse another
+visit's intermediates.
 
 ---
 
@@ -421,13 +757,21 @@ refuses to cross a gap larger than one day by default:
 | Stage | Control | Default |
 |---|---|---|
 | `miri_mrs_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
-| `prepare_mrs_pfpc_epochs` | `--max-gap-days` | 1.0 d |
-| `combine_epoch_spectra` | `--max-gap-days` | 1.0 d |
 | `nirspec_fs_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
 | `nirspec_ifu_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
+| `miri_lrs_fs_auto_pipeline` | `--max-epoch-gap-days` | 1.0 d |
+| `prepare_mrs_pfpc_epochs` | `--max-gap-days` | 1.0 d |
+| `combine_epoch_spectra` | `--max-gap-days` | 1.0 d |
 | `jspec stitch` / `jspec.epochs` | `--max-gap-days` | 1.0 d |
 
-All six read the same MJD (`MJD-OBS`, else `EXPSTART`; `MJD_MEAN` then
+Since the restructure this is belt *and* braces. The directory layout
+already makes cross-epoch contamination impossible at the reduction stage,
+because an epoch directory holds exactly one visit's files and a Stage-3
+association is built from one directory. The date checks remain for the
+analysis layer, where you point a glob at files whose provenance it cannot
+otherwise know.
+
+All of them read the same MJD (`MJD-OBS`, else `EXPSTART`; `MJD_MEAN` then
 `MJD_MIN` for `.ecsv` tables) through the same `group_files_by_epoch`, so
 there is exactly one definition of "epoch" in the codebase and the analysis
 layer cannot drift from the reduction layer.
@@ -436,7 +780,7 @@ layer cannot drift from the reduction layer.
 catch a mis-grouped visit here than after Stage 3:
 
 ```bash
-jspec epochs "SN2024aecx/**/reextract/*_x1d.fits"
+jspec epochs "SN2024aecx/*/*/final/*.ecsv"
 ```
 
 ```
@@ -462,7 +806,7 @@ In Python:
 from jspec.epochs import group_segments_by_epoch
 from jspec.stitch import stitch
 
-for ep in group_segments_by_epoch("reextract/*_x1d.fits", redshift=0.002665):
+for ep in group_segments_by_epoch("SN2024aecx/*/*/final/*.ecsv", redshift=0.002665):
     report = stitch(ep.segments)
     report.spectrum.write(f"SN2024aecx_{ep.label}.ecsv")
 ```
@@ -477,7 +821,7 @@ mean it.
 ## 5. Stitch the segments into one spectrum
 
 ```bash
-jspec stitch "SN2024aecx/**/reextract/*_x1d.fits" \
+jspec stitch "SN2024aecx/*/*/final/*.ecsv" \
     -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
 ```
 
@@ -493,7 +837,7 @@ In Python:
 from jspec.spectrum import read_segments
 from jspec.stitch import stitch
 
-segs = read_segments("reextract/*_x1d.fits", redshift=0.002665)
+segs = read_segments("SN2024aecx/*/*/final/*.ecsv", redshift=0.002665)
 report = stitch(segs)
 print(report.summary())
 report.spectrum.write("SN2024aecx_2025-06-01.ecsv")
@@ -962,7 +1306,18 @@ drops below ~5.
 | `jspec.plotting` | Band overlays, feature labels, diagnostics |
 | `jspec.metallicity` | Late-time SN abundance diagnostics |
 | `jspec.cli` | The `jspec` command |
+| `jspec.layout` | The output directory layout; every pipeline path comes from here |
+| `jspec.manifest` | `products.csv` — what was produced, and which file to analyse |
+| `jspec.columns` | Canonical uppercase column names; `spectrum_table()` |
 | `jspec.pipelines` | Stage 1/2/3 reduction drivers |
+
+The bottom three exist so that the reduction scripts agree with each other.
+Before them, each pipeline invented its own directory names, its own product
+names and its own column capitalisation, and reconciling the output was
+manual work. If you are adding a pipeline, build paths with
+`jspec.layout.ensure_epoch_tree()`, write tables with
+`jspec.columns.spectrum_table()`, and announce the result with
+`jspec.manifest.record_product()`; do not construct any of those by hand.
 
 ### `jspec.spectrum` — the container everything speaks
 
@@ -1084,6 +1439,37 @@ resolves when your current directory happens to be the repository root. All
 cross-imports between pipeline scripts should be absolute
 (`from jspec.pipelines.combine_nirspec_orders import get_mjd`), which works
 whether the script is run with `-m`, run directly, or imported.
+
+**`the following arguments are required: --outdir`** — the auto-pipelines no
+longer have a default output directory. Pass one. Use the *same* `--outdir`
+for every instrument on a target: the layout keeps them apart and
+`jspec stitch` later needs them together.
+
+**My old output tree does not match the new layout** — trees produced before
+the restructure have the shape `<outdir>/<TAG>_<DATE>/` with
+`stage1/stage2/stage3` directly under `<outdir>`. Nothing reads that layout
+any more. The uncal files are still perfectly good, so the cheapest fix is
+to point a new run at them:
+
+```bash
+python -m jspec.pipelines.miri_mrs_auto_pipeline \
+    --proposal 9233 --outdir SN2024aecx_new --skip-download
+```
+
+Move or symlink the old uncal files into `SN2024aecx_new/_downloaded_uncal/`
+first and nothing is re-downloaded. Reduction products do have to be
+regenerated; there is no migration path for them, and re-deriving them is
+safer than guessing which old file belonged to which visit.
+
+**`products.csv` is empty, stale, or missing rows** — run
+`jspec products <outdir> --rebuild`. Recording a product never raises, by
+design, so that a failure to write the index cannot kill a reduction that
+otherwise succeeded; the cost is that the index can silently fall behind.
+
+**A spectrum reads with no error column** — check the column names. New
+files use uppercase `FLUX_ERROR`; some older third-party files use `ERR` or
+`ERROR`, which readers also accept. `jspec.columns.normalize_columns()` will
+tell you what it found.
 
 **`fit_feature needs dynesty: pip install dynesty`** — exactly what it says.
 

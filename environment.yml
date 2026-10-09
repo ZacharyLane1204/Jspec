@@ -1,0 +1,112 @@
+# jspec -- one conda environment for the whole chain
+# =====================================================
+#
+# Create it with:
+#
+#     conda env create -f environment.yml
+#     conda activate jspec
+#     pip install -e .
+#
+# and update an existing one with:
+#
+#     conda env update -f environment.yml --prune
+#
+# What this replaces
+# ------------------
+# The reduction previously needed two environments: one with the JWST
+# calibration pipeline, and a second for MRS-PFPC. Switching between them
+# mid-reduction is easy to get wrong, and the log-quieting wrapper only
+# existed because the two could not see each other's code. Both sets of
+# packages are compatible, so they are installed together here.
+#
+# Python version
+# --------------
+# Pinned to 3.13. The JWST pipeline publishes wheels for a narrow range of
+# Python versions, and 3.13 is the newest it currently supports; anything
+# newer silently falls back to building from source or fails to resolve.
+# Conda will pick the latest 3.13.x patch release.
+#
+# Why some things are conda and others pip
+# ----------------------------------------
+# Anything with compiled extensions or awkward binary dependencies comes
+# from conda-forge, which has prebuilt, mutually consistent binaries.
+# Pure-Python packages, and anything installed straight from GitHub, come
+# from pip. Mixing the two in one environment is fine as long as conda
+# installs first, which is what conda env create does.
+
+name: jspec
+
+channels:
+  - conda-forge
+
+dependencies:
+  - python=3.13
+
+  # --- core scientific stack ---------------------------------------------
+  # Pinned at major-version floors rather than exact versions: the JWST
+  # pipeline's own requirements are the binding constraint, and
+  # over-pinning here just causes unsolvable environments.
+  - numpy>=1.24
+  - scipy>=1.10
+  - astropy>=6.0
+  - matplotlib>=3.7
+  - pandas>=2.0
+  - pyerfa
+  - asdf
+  - h5py
+  - pyyaml
+  - requests
+  - tqdm
+
+  # --- compiled / binary-heavy, much easier from conda --------------------
+  - scikit-image          # used by jwst's outlier detection
+  - photutils             # source detection and aperture photometry
+  - sep                   # fast background estimation on 2D images
+  - shapely               # spherical_geometry / drizzle dependencies
+  - pyarrow
+
+  # --- interactive use ----------------------------------------------------
+  # Optional, but a reduction almost always ends in a notebook, and having
+  # jupyter in the same environment avoids a second kernel install.
+  - jupyterlab
+  - ipympl                # interactive matplotlib widgets in notebooks
+
+  - pip
+
+  - pip:
+      # --- JWST calibration pipeline ----------------------------------
+      # Pulls in stpipe, stcal, stdatamodels, crds, gwcs, drizzle,
+      # spherical_geometry and the rest of the STScI stack at mutually
+      # consistent versions. Let it resolve those itself rather than
+      # pinning them here -- they change together on every release.
+      - jwst>=1.15
+
+      # --- MAST access -------------------------------------------------
+      - astroquery>=0.4.7
+
+      # --- spectral analysis -------------------------------------------
+      - specutils>=1.12
+      - spectral-cube
+
+      # --- jspec's own optional extras ---------------------------------
+      # dynesty powers `jspec fit`; pyneb gives `jspec.metallicity` real
+      # collisionally-excited-line emissivities instead of its built-in
+      # fallback table.
+      - dynesty>=2.0
+      - pyneb>=1.1
+
+      # --- from GitHub, no PyPI release --------------------------------
+      # AstroBkgInterp does the source-masked background estimation that
+      # both IFU pipelines rely on.
+      - git+https://github.com/brynickson/AstroBkgInterp.git
+
+      # MRS-PFPC: the MIRI MRS point-source fringe and photometric
+      # correction, used by the Route B reduction. Provides the
+      # pfpc_proc / pfpc_cor / pfpc_plot commands. It does not declare
+      # its jwst dependency, which is why jwst is listed above it.
+      - git+https://github.com/STScI-MIRI/MRS-PFPC.git
+
+      # jspec itself is deliberately NOT listed here. Install it after
+      # the environment exists, in editable mode, so your working copy is
+      # what gets imported:
+      #     pip install -e .

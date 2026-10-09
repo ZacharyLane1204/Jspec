@@ -183,9 +183,22 @@ if os.getenv("CRDS_SERVER_URL") is None:
 # are the only routine progress output.
 # jwst/stpipe/CRDS log verbosity is controlled by --verbose in main() below
 # (default: WARNING-only, to keep the console to our own print()s/tqdm bars).
-_QUIET_LOGGERS = ("stpipe", "jwst", "CRDS", "asdf", "stdatamodels")
+# NB: setLevel() alone is not enough -- stpipe resets these to INFO on the
+# first Step.call(). See jwst_logging.configure_jwst_logging for why, and
+# for the override-proof version applied in main().
+_QUIET_LOGGERS = ("stpipe", "jwst", "stcal", "stdatamodels", "tweakwcs",
+                  "CRDS", "asdf")
 for _name in _QUIET_LOGGERS:
     logging.getLogger(_name).setLevel(logging.WARNING)
+
+from jspec.pipelines.jwst_logging import (  # noqa: E402
+    configure_jwst_logging, configure_from_env, set_env_level,
+)
+
+# Applied at import, not just in main(): on spawn platforms the
+# multiprocessed jwst steps re-import this module in child processes
+# that never reach main(), and those children share our stderr.
+configure_from_env()
 
 from astropy.io import fits                     # noqa: E402
 from astropy.stats import sigma_clipped_stats    # noqa: E402
@@ -199,6 +212,8 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base       # noqa
 
 from jspec.pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr  # noqa: E402
 from jspec.pipelines.mast_uncal_download import download_uncal  # noqa: E402  (keep next to this script)
+from jspec.layout import ensure_epoch_tree, find_epoch_dirs, product_basename  # noqa: E402
+from jspec.manifest import MANIFEST_NAME, record_product  # noqa: E402
 
 # AstroBkgInterp -- https://github.com/brynickson/AstroBkgInterp
 # pip install git+https://github.com/brynickson/AstroBkgInterp.git
@@ -381,13 +396,120 @@ def run_spec2(sci_rate, asn_dir, spec2_dir):
 
 
 # ===========================================================================
-# Epoch grouping (on Stage-2 cal files, before Stage 3)
+# Per-epoch directory staging (see jspec/layout.py for the layout)
 # ===========================================================================
 
-def get_epoch_groups(cal_files, max_epoch_gap_days):
-    """Group Stage-2 calibrated files by (TARGNAME, epoch), where an epoch
-    is a cluster of exposures whose MJDs are all within max_epoch_gap_days
-    of their neighbors. Returns {(targname, epoch_label): [cal_files]}."""
+def stage_uncal(files, uncal_dir):
+    """Link (or copy) an epoch's uncal files into its own uncal/ directory.
+
+    Symlinks are used so that re-running does not duplicate tens of GB of
+    raw data; if the filesystem refuses them (some network mounts do) the
+    file is copied instead. Returns the staged paths, which are what the
+    rest of the pipeline then works on, so Detector1 outputs land in the
+    right epoch tree.
+    """
+    staged = []
+    for src in files:
+        dst = os.path.join(uncal_dir, os.path.basename(src))
+        if not os.path.exists(dst):
+            try:
+                os.symlink(os.path.abspath(src), dst)
+            except OSError:
+                import shutil
+                shutil.copy2(src, dst)
+        staged.append(dst)
+    return sorted(staged)
+
+
+def find_staged_uncal(outdir, download_dir):
+    """Collect uncal files for --skip-download from anywhere sensible.
+
+    Looks in the staging directory, in any existing epoch tree's uncal/,
+    and in a plain <outdir>/uncal/ (the pre-layout location), so a tree
+    built by an older version of this script, or by
+    prepare_mrs_pfpc_epochs, still works. Duplicates are resolved by real
+    path, since epoch directories hold symlinks back to the staging area.
+    """
+    candidates = glob.glob(os.path.join(download_dir, "*uncal.fits"))
+    candidates += glob.glob(os.path.join(outdir, "uncal", "*uncal.fits"))
+    candidates += glob.glob(os.path.join(outdir, "*", "*", "uncal", "*uncal.fits"))
+    candidates += glob.glob(os.path.join(outdir, "*uncal.fits"))
+
+    seen, unique = set(), []
+    for path in sorted(candidates):
+        key = os.path.realpath(path)
+        if key not in seen:
+            seen.add(key)
+            unique.append(path)
+    return unique
+
+
+def collect_existing_cubes(outdir, tag=None):
+    """Find Stage-3 cubes already present in the epoch trees.
+
+    Used by --from-stage3. Returns (product_name, cube_file, paths)
+    tuples matching what the main loop builds, so the re-extraction half
+    of the pipeline is identical either way.
+    """
+    found = []
+    for _label, dir_tag, date, epoch_path in find_epoch_dirs(outdir, "MIRI-MRS"):
+        if tag and dir_tag != tag:
+            continue
+        stage3 = os.path.join(epoch_path, "stage3")
+        cubes = sorted(glob.glob(os.path.join(stage3, "*_s3d.fits")))
+        if not cubes:
+            continue
+        paths = ensure_epoch_tree(outdir, "MIRI-MRS", dir_tag, date)
+        # One multi-band cube per epoch is the normal case; if a run left
+        # several, take the one matching the epoch stem.
+        stem = paths["stem"]
+        preferred = [c for c in cubes if os.path.basename(c).startswith(stem)]
+        for cube in (preferred or cubes):
+            name = os.path.basename(cube).rsplit("_s3d.fits", 1)[0]
+            found.append((name, cube, paths))
+    return found
+
+
+def record_stage3_products(outdir, paths, tag, date):
+    """Note the Stage-3 x1d products in the output directory's index.
+
+    Stage 3 is not the recommended product for MRS -- the AstroBkgInterp
+    re-extraction is -- but it is recorded anyway, because comparing the
+    two is the quickest check that the re-extraction behaved.
+    """
+    for x1d in sorted(glob.glob(os.path.join(paths["stage3"], "*_x1d.fits"))):
+        ecsv = x1d[:-5] + ".ecsv"
+        if not os.path.exists(ecsv):
+            try:
+                from astropy.table import Table
+                from jspec.columns import normalize_columns
+                table = normalize_columns(Table.read(x1d))
+                table.write(ecsv, format="ascii.ecsv", overwrite=True)
+            except Exception:
+                ecsv = ""
+        record_product(outdir, "MIRI-MRS", tag, date, ecsv or x1d,
+                       product="x1d", level="stage3", fits_path=x1d,
+                       recommended=False, quiet=True)
+
+
+# ===========================================================================
+# Epoch grouping (on uncal files, before any calibration runs)
+# ===========================================================================
+
+def get_epoch_groups(files, max_epoch_gap_days):
+    """Group exposures by (TARGNAME, epoch).
+
+    An epoch is a cluster of exposures whose MJDs are all within
+    `max_epoch_gap_days` of their neighbours; the label is the mean date
+    as YYYY-MM-DD. Returns {(targname, epoch_label): [files]}.
+
+    Works on any JWST product with TARGNAME and a date in the header, but
+    is called on the *uncal* files, so each epoch can be given its own
+    directory tree before Detector1 runs. Grouping later (at Stage 3, as
+    this script originally did) means all epochs share one stage1/stage2
+    directory, which makes it far too easy to build a Level-3 association
+    spanning two visits.
+    """
     by_target = defaultdict(list)
     for f in cal_files:
         by_target[fits.getval(f, "TARGNAME") or "UNKNOWN_TARGET"].append(f)
@@ -3104,7 +3226,8 @@ def _plot_epoch_comparison(results, plot_file):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--proposal", required=True, help="JWST proposal/program number, e.g. 1523")
-    parser.add_argument("--outdir", default=None, help="Base output directory (default: ./mrs_data_<proposal>)")
+    parser.add_argument("--outdir", required=True,
+                    help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     parser.add_argument("--skip-download", action="store_true",
                          help="Reuse existing files in <outdir>/uncal/ instead of querying MAST")
     parser.add_argument("--from-stage3", action="store_true",
@@ -3115,6 +3238,10 @@ def main():
                               "reduction. Overrides --skip-download (moot -- download isn't run).")
     parser.add_argument("--max-cores", default="half", choices=["none", "quarter", "half", "all"],
                          help="Cores to use for the jump step (default: half)")
+    parser.add_argument("--log-file", default=None,
+                         help="Also write the jwst/stpipe log to this file. Pairs well with "
+                              "the default quiet console: clean terminal, full detail on "
+                              "disk if a run needs debugging afterwards.")
     parser.add_argument("--verbose", action="store_true",
                          help="Show full jwst/stpipe/CRDS logging output (step parameter dumps, "
                               "CRDS reference-file lookups, etc.) instead of the default "
@@ -3201,9 +3328,11 @@ def main():
     
     
 
-    if args.verbose:
-        for _name in _QUIET_LOGGERS:
-            logging.getLogger(_name).setLevel(logging.INFO)
+    # Must happen before any pipeline step runs: whoever configures
+    # logging first wins, and stpipe defaults to INFO.
+    _level = "INFO" if args.verbose else "WARNING"
+    set_env_level(_level)   # so spawned workers match the parent
+    configure_jwst_logging(_level, log_file=getattr(args, "log_file", None))
 
     have_xy = (args.src_x is not None) and (args.src_y is not None)
     have_radec = (args.ra is not None) and (args.dec is not None)
@@ -3217,61 +3346,83 @@ def main():
     proposal_num = int(args.proposal)
     proposal_padded = f"{proposal_num:05d}"
     tag_suffix = f"_{args.tag}" if args.tag else ""
-    outdir = args.outdir or os.path.abspath(f"./mrs_data_{proposal_padded}{tag_suffix}")
+    outdir = os.path.abspath(args.outdir)   # absolute: association files need it
 
-    uncal_dir = os.path.join(outdir, "uncal")
-    det1_dir = os.path.join(outdir, "stage1")
-    asn_dir = os.path.join(outdir, "asn")
-    spec2_dir = os.path.join(outdir, "stage2")
-    spec3_dir = os.path.join(outdir, "stage3")
-    bgsub_dir = os.path.join(outdir, "bgsub")
-    for d in (uncal_dir, det1_dir, asn_dir, spec2_dir, spec3_dir, bgsub_dir):
-        os.makedirs(d, exist_ok=True)
+    # Staging area for the raw downloads. Epochs are not known until the
+    # headers have been read, so everything lands here first and is then
+    # distributed into per-epoch trees.
+    download_dir = os.path.join(outdir, "_downloaded_uncal")
+    os.makedirs(download_dir, exist_ok=True)
 
     print(f"jwst version: {jwst.__version__}  |  output directory: {outdir}")
 
     t0 = time.perf_counter()
 
+    # to_process entries are (product_name, cube_file, epoch_paths), where
+    # epoch_paths is the layout dict for that epoch (or None when running
+    # --from-stage3 over a tree we did not build).
     if args.from_stage3:
-        cube_files = sorted(glob.glob(os.path.join(spec3_dir, "*_s3d.fits")))
-        if not cube_files:
-            raise SystemExit(f"--from-stage3: no existing '*_s3d.fits' cubes found in {spec3_dir}.")
-        to_process = [(os.path.basename(f).rsplit("_s3d.fits", 1)[0], f) for f in cube_files]
-        print(f"--from-stage3: reusing {len(to_process)} existing cube(s) in {spec3_dir} "
+        to_process = collect_existing_cubes(outdir, args.tag)
+        if not to_process:
+            raise SystemExit(
+                f"--from-stage3: no existing '*_s3d.fits' cubes found under {outdir}. "
+                f"Expected them in <outdir>/MIRI-MRS/<target>_<date>/stage3/.")
+        print(f"--from-stage3: reusing {len(to_process)} existing cube(s) "
               f"(download/Detector1/Spec2/Spec3 skipped)")
     else:
         if args.skip_download:
-            uncal_files = sorted(glob.glob(os.path.join(uncal_dir, "*uncal.fits")))
+            uncal_files = find_staged_uncal(outdir, download_dir)
             if args.dataset:
-                uncal_files = [f for f in uncal_files if any(d in os.path.basename(f) for d in args.dataset)]
+                uncal_files = [f for f in uncal_files
+                               if any(d in os.path.basename(f) for d in args.dataset)]
             print(f"--skip-download: using {len(uncal_files)} existing uncal file(s).")
         else:
-            uncal_files = query_and_download(proposal_padded, proposal_num, uncal_dir, dataset_ids=args.dataset)
+            uncal_files = query_and_download(proposal_padded, proposal_num,
+                                             download_dir, dataset_ids=args.dataset)
+        if not uncal_files:
+            raise SystemExit("No uncalibrated files to process.")
 
         check_mrs_coverage(uncal_files)
-        rate_files = run_detector1(uncal_files, det1_dir, args.max_cores, redo=args.redo)
 
-        # BKGDTARG classification is no longer used to drive a dedicated
-        # master_background path -- AstroBkgInterp masks the source directly
-        # on the science cube. Dedicated background exposures (if any) are
-        # simply not processed further.
-        sci_rate = filter_list(rate_files, "BKGDTARG", False)
-
-        cal_files = run_spec2(sci_rate, asn_dir, spec2_dir)
-        if not cal_files:
-            raise SystemExit("No Stage-2 calibrated products were produced -- stopping.")
-
-        epoch_groups = get_epoch_groups(cal_files, args.max_epoch_gap_days)
+        # Epochs are decided here, on the uncal headers, *before* any
+        # calibration runs. Doing it up front (rather than at Stage 3, as
+        # this script used to) means each epoch gets its own self-contained
+        # directory tree and exposures from different visits can never share
+        # a Stage-3 association by accident.
+        epoch_groups = get_epoch_groups(uncal_files, args.max_epoch_gap_days)
         n_targets = len(set(k[0] for k in epoch_groups))
         print(f"{len(epoch_groups)} (target, epoch) group(s) across {n_targets} target(s) "
-              f"(>{args.max_epoch_gap_days} day gap = new epoch)")
+              f"(>{args.max_epoch_gap_days} day gap = new epoch)\n")
 
         to_process = []
-        for (targname, epoch), group_cal_files in tqdm(list(epoch_groups.items()), desc="Spec3", unit="group"):
-            product_name = f"{targname}_{epoch}{tag_suffix}"
-            cube_file = run_spec3_group(group_cal_files, asn_dir, spec3_dir, product_name)
+        for (targname, epoch), group_uncal in epoch_groups.items():
+            tag = args.tag or targname
+            paths = ensure_epoch_tree(outdir, "MIRI-MRS", tag, epoch)
+            product_name = paths["stem"]
+            print(f"=== {product_name}: {len(group_uncal)} exposure(s) -> "
+                  f"{os.path.relpath(paths['epoch'], outdir)}")
+
+            staged = stage_uncal(group_uncal, paths["uncal"])
+
+            rate_files = run_detector1(staged, paths["stage1"],
+                                       args.max_cores, redo=args.redo)
+
+            # BKGDTARG classification is no longer used to drive a dedicated
+            # master_background path -- AstroBkgInterp masks the source
+            # directly on the science cube. Dedicated background exposures
+            # (if any) are simply not processed further.
+            sci_rate = filter_list(rate_files, "BKGDTARG", False)
+
+            cal_files = run_spec2(sci_rate, paths["asn"], paths["stage2"])
+            if not cal_files:
+                print(f"  WARNING: no Stage-2 products for {product_name} -- skipping.")
+                continue
+
+            cube_file = run_spec3_group(cal_files, paths["asn"],
+                                        paths["stage3"], product_name)
             if cube_file is not None:
-                to_process.append((product_name, cube_file))
+                to_process.append((product_name, cube_file, paths))
+                record_stage3_products(outdir, paths, tag, epoch)
 
     if (have_xy or have_radec) and len(to_process) > 1:
         print("  NOTE: an explicit source position was given but there is more than one "
@@ -3281,7 +3432,9 @@ def main():
               "position.\n")
 
     bgsub_outputs = {}
-    for product_name, cube_file in tqdm(to_process, desc="AstroBkgInterp", unit="cube"):
+    for product_name, cube_file, paths in tqdm(to_process, desc="AstroBkgInterp", unit="cube"):
+        bgsub_dir = paths["reextract"] if paths else os.path.join(outdir, "bgsub")
+        os.makedirs(bgsub_dir, exist_ok=True)
         if have_xy or have_radec:
             src_x, src_y = resolve_source_pixel(cube_file, ra=args.ra, dec=args.dec,
                                                  x=args.src_x, y=args.src_y)
@@ -3304,12 +3457,17 @@ def main():
         bgsub_outputs[product_name] = out_path
 
     t_end = time.perf_counter()
-    print(f"\nDone in {(t_end - t0) / 60:.1f} min. Background-subtracted cubes in {bgsub_dir}:")
+    print(f"\nDone in {(t_end - t0) / 60:.1f} min. Background-subtracted cubes:")
     for key, path in bgsub_outputs.items():
-        print(f"  {key}: {path}")
-    print("\nNo 1D spectrum was extracted automatically. Extract manually with "
-          "extract_spectrum_manual() from this module, e.g.:\n"
-          "    from miri_mrs_auto_pipeline import extract_spectrum_manual\n"
+        print(f"  {key}: {os.path.relpath(path, outdir)}")
+
+    print(f"\nProduct index: {os.path.join(outdir, MANIFEST_NAME)}")
+    print("\nNo 1D spectrum was extracted automatically. Either run the "
+          "AstroBkgInterp re-extraction, which writes the final combined "
+          "spectrum and records it in the product index:\n"
+          f"    python -m jspec.pipelines.abi_reextract_pfpc --outdir {outdir}\n"
+          "or extract a single cube by hand:\n"
+          "    from jspec.pipelines.miri_mrs_auto_pipeline import extract_spectrum_manual\n"
           "    wave, flux, err, (x, y) = extract_spectrum_manual(\n"
           "        '<bgsub_cube>.fits', x=34.2, y=51.7)          # pixel coords, or:\n"
           "    wave, flux, err, (x, y) = extract_spectrum_manual(\n"

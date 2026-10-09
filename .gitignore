@@ -33,3 +33,16 @@ final_spectra/
 
 # OS
 .DS_Store
+
+# Per-target reduction trees. These are created by the pipelines with
+# whatever --outdir you pass, so they cannot be matched by a fixed name.
+# Listed explicitly rather than with a wildcard so that a genuine source
+# directory never gets ignored by accident.
+SN2024aecx/
+fs_data_*/
+mrs_data_*/
+ifu_data_*/
+lrs_data_*/
+products.csv
+_downloaded_uncal/
+plot_check.ipynb

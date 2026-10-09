@@ -347,6 +347,43 @@ def cmd_info(args):
 
 
 # ---------------------------------------------------------------------------
+def cmd_products(args):
+    """List (or rebuild) the final-product index for an output directory.
+
+    This is the quickest answer to "which file do I actually analyse?":
+    the pipelines record every final-level spectrum they write, and flag
+    the one that is the recommended starting point per instrument.
+    """
+    from .manifest import MANIFEST_NAME, read_manifest, rebuild_manifest
+
+    rows = (rebuild_manifest(args.outdir) if args.rebuild
+            else read_manifest(args.outdir))
+    if args.instrument:
+        from .layout import instrument_label
+        want = instrument_label(args.instrument)
+        rows = [r for r in rows if r.get("instrument") == want]
+    if args.recommended:
+        rows = [r for r in rows if r.get("recommended") == "yes"]
+
+    if not rows:
+        print(f"No products recorded in {os.path.join(args.outdir, MANIFEST_NAME)}."
+              "\nRun with --rebuild to scan the tree, or run a pipeline first.")
+        return 1
+
+    width = max(len(r.get("instrument", "")) for r in rows)
+    epoch_width = max(len(r.get("epoch", "")) for r in rows)
+    for row in rows:
+        star = "*" if row.get("recommended") == "yes" else " "
+        span = (f"{row['wave_min_um']}-{row['wave_max_um']} um"
+                if row.get("wave_min_um") else "")
+        print(f"{star} {row.get('instrument',''):<{width}}  "
+              f"{row.get('epoch',''):<{epoch_width}}  "
+              f"{row.get('product',''):<14}  {span:<20}  {row.get('path','')}")
+    if any(r.get("recommended") == "yes" for r in rows):
+        print("\n* = recommended product to analyse for this instrument/epoch")
+    return 0
+
+
 def build_parser():
     ap = argparse.ArgumentParser(
         prog="jspec", description="JWST spectral analysis toolkit")
@@ -471,6 +508,20 @@ def build_parser():
     p.add_argument("inputs", nargs="+")
     p.add_argument("--max-gap-days", type=float, default=1.0)
     p.set_defaults(func=cmd_epochs)
+
+    # products -----------------------------------------------------------
+    p = sub.add_parser(
+        "products",
+        help="list or rebuild the final-product index of an output directory")
+    p.add_argument("outdir", help="Pipeline output directory")
+    p.add_argument("--rebuild", action="store_true",
+                   help="Rescan the tree and rewrite products.csv from what "
+                        "is actually on disk, instead of just reading it")
+    p.add_argument("--instrument", help="Only show this instrument")
+    p.add_argument("--recommended", action="store_true",
+                   help="Only show the product to analyse for each instrument "
+                        "and epoch")
+    p.set_defaults(func=cmd_products)
 
     # info ---------------------------------------------------------------
     p = _p_common(sub.add_parser("info", help="summarise a spectrum file"))

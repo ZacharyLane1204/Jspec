@@ -220,7 +220,8 @@ def run_image3(cal_files, image3_dir, tag_suffix=""):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--proposal", required=True, help="JWST proposal/program number, e.g. 1040")
-    parser.add_argument("--outdir", default=None, help="Base output directory (default: ./nircam_imaging_data_<proposal>)")
+    parser.add_argument("--outdir", required=True,
+                    help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     parser.add_argument("--skip-download", action="store_true",
                          help="Reuse existing files in <outdir>/uncal/ instead of querying MAST")
     parser.add_argument("--max-cores", default="half", choices=["none", "quarter", "half", "all"],
@@ -233,7 +234,7 @@ def main():
     proposal_num = int(args.proposal)
     proposal_padded = f"{proposal_num:05d}"
     tag_suffix = f"_{args.tag}" if args.tag else ""
-    outdir = args.outdir or os.path.abspath(f"./nircam_imaging_data_{proposal_padded}{tag_suffix}")
+    outdir = os.path.abspath(args.outdir)   # absolute: association files need it
 
     uncal_dir = os.path.join(outdir, "uncal")
     det1_dir = os.path.join(outdir, "stage1")

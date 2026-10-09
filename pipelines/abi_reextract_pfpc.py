@@ -77,12 +77,15 @@ import glob
 import json
 import os
 import re
+import shutil
 
 import numpy as np
 
 import jspec.pipelines.miri_mrs_auto_pipeline as mp
 from jspec.pipelines.combine_epoch_spectra import combine_epoch_spectrum
 from jspec.pipelines.combine_nirspec_orders import save_combined_spectrum
+from jspec.layout import ensure_epoch_tree, find_epoch_dirs
+from jspec.manifest import MANIFEST_NAME, record_product
 
 
 _CHBAND_RE = re.compile(r"_ch(\d)-(short|medium|long)_s3d\.fits$", re.IGNORECASE)
@@ -242,6 +245,32 @@ def process_cube(cube_file, out_dir, product_name, ra=None, dec=None,
     return x1d_file, centroid
 
 
+#: Where per-channel Level-3 cubes may live inside an epoch directory,
+#: in the order they are preferred. "pfpc" wins because a PFPC-corrected
+#: cube is a better starting point than the plain Stage-3 one.
+_CUBE_SUBDIRS = ("pfpc", "stage3")
+
+
+def discover_mrs_epochs(outdir, tag=None, date=None):
+    """Find MIRI-MRS epochs under `outdir` that have Level-3 cubes.
+
+    Returns (tag, date, level3_dir, paths) tuples, where `paths` is the
+    epoch's layout dict. Epochs without cubes are skipped silently --
+    they are usually just visits that have not been through Stage 3 yet.
+    """
+    found = []
+    for _label, dir_tag, dir_date, epoch_path in find_epoch_dirs(outdir, "MIRI-MRS"):
+        if (tag and dir_tag != tag) or (date and dir_date != date):
+            continue
+        for sub in _CUBE_SUBDIRS:
+            candidate = os.path.join(epoch_path, sub)
+            if glob.glob(os.path.join(candidate, "*_ch*-*_s3d.fits")):
+                paths = ensure_epoch_tree(outdir, "MIRI-MRS", dir_tag, dir_date)
+                found.append((dir_tag, dir_date, candidate, paths))
+                break
+    return found
+
+
 def process_level3_dir_with_abi(level3_dir, out_dir, product_name, ra=None, dec=None,
                                  pattern="*_ch*-*_s3d.fits", auto_scale=True,
                                  clip_sigma_combine=3.0, min_scale_snr=3.0,
@@ -288,11 +317,23 @@ def process_level3_dir_with_abi(level3_dir, out_dir, product_name, ra=None, dec=
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--level3-dir", required=True,
-                     help="Directory containing PFPC's per-channel/band "
-                          "*_ch{N}-{band}_s3d.fits cubes (one epoch)")
-    ap.add_argument("--outdir", required=True)
-    ap.add_argument("--product-name", required=True)
+    ap.add_argument("--outdir", required=True,
+                     help="Output directory for this target. On its own, every "
+                          "MIRI-MRS epoch found underneath is re-extracted in "
+                          "turn and recorded in products.csv.")
+    ap.add_argument("--level3-dir", default=None,
+                     help="Process one specific directory of per-channel/band "
+                          "*_ch{N}-{band}_s3d.fits cubes instead of scanning "
+                          "--outdir. Use this for a PFPC working directory that "
+                          "does not follow the jspec layout. Requires "
+                          "--product-name.")
+    ap.add_argument("--product-name", default=None,
+                     help="Output filename stem; only needed with --level3-dir "
+                          "(otherwise it is the epoch's <target>_<date>).")
+    ap.add_argument("--tag", default=None,
+                     help="Only process epochs whose directory tag matches this")
+    ap.add_argument("--date", default=None,
+                     help="Only process this epoch date (YYYY-MM-DD)")
     ap.add_argument("--ra", type=float, default=None,
                      help="Source RA (deg). With --dec, skips per-band "
                           "auto-centroiding and resolves this sky position "
@@ -358,8 +399,8 @@ def main():
         skip_abi_channels = {c.strip() for c in args.skip_abi_channels.split(",") if c.strip()}
         print(f"Skipping AstroBkgInterp entirely for channel(s): {sorted(skip_abi_channels)}")
 
-    process_level3_dir_with_abi(
-        args.level3_dir, args.outdir, args.product_name, ra=args.ra, dec=args.dec,
+    common = dict(
+        ra=args.ra, dec=args.dec,
         bkg_mode=args.bkg_mode, fwhm_scale=args.fwhm_scale, poly_k=args.poly_k,
         bin_size=args.bin_size, min_aper_rad=args.min_aper_rad,
         channel_overrides=channel_overrides, skip_abi_channels=skip_abi_channels,
@@ -367,6 +408,49 @@ def main():
         auto_scale=not args.no_auto_scale, clip_sigma_combine=args.clip_sigma,
         min_scale_snr=args.min_scale_snr, max_scale_factor=args.max_scale_factor,
         max_rel_uncertainty=args.max_rel_uncertainty)
+
+    if args.level3_dir:
+        if not args.product_name:
+            raise SystemExit("--level3-dir requires --product-name.")
+        process_level3_dir_with_abi(args.level3_dir, args.outdir,
+                                     args.product_name, **common)
+        return
+
+    epochs = discover_mrs_epochs(args.outdir, tag=args.tag, date=args.date)
+    if not epochs:
+        raise SystemExit(
+            f"No MIRI-MRS epochs with Level-3 cubes found under {args.outdir}.\n"
+            f"Expected <outdir>/MIRI-MRS/<target>_<date>/stage3/*_ch*-*_s3d.fits "
+            f"(or pfpc/), which is what miri_mrs_auto_pipeline and "
+            f"import_pfpc_products produce. To point at an arbitrary directory "
+            f"of cubes instead, use --level3-dir with --product-name.")
+
+    print(f"{len(epochs)} MIRI-MRS epoch(s) to re-extract\n")
+    if (args.ra is not None) and len(epochs) > 1:
+        print("  NOTE: an explicit --ra/--dec was given but more than one epoch "
+              "will be processed -- the same sky position is applied to all of "
+              "them. That is usually fine for a fixed target, but narrow the run "
+              "with --date if the epochs need different positions.\n")
+
+    for tag, date, level3_dir, paths in epochs:
+        stem = paths["stem"]
+        print(f"=== {stem}: cubes in {os.path.relpath(level3_dir, args.outdir)}")
+        out_base, _x1ds, _log = process_level3_dir_with_abi(
+            level3_dir, paths["reextract"], stem, **common)
+
+        # The combined spectrum is the product to analyse, so it is
+        # promoted out of reextract/ into final/ and flagged in the index.
+        final_base = os.path.join(paths["final"], f"{stem}_abi_combined")
+        for ext in (".ecsv", ".fits"):
+            if os.path.exists(out_base + ext):
+                shutil.copy2(out_base + ext, final_base + ext)
+        record_product(args.outdir, "MIRI-MRS", tag, date,
+                        final_base + ".ecsv", product="abi_combined",
+                        level="final",
+                        fits_path=final_base + ".fits"
+                        if os.path.exists(final_base + ".fits") else None)
+
+    print(f"\nProduct index: {os.path.join(args.outdir, MANIFEST_NAME)}")
 
 
 if __name__ == "__main__":
