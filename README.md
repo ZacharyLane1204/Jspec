@@ -267,8 +267,8 @@ python -m jspec.pipelines.nirspec_fs_auto_pipeline --proposal 9233 --target SN20
 jspec products SN2024aecx
 
 # Analyse
-jspec stitch "SN2024aecx/*/*/final/*.ecsv" -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
-jspec detect SN2024aecx_2025-06-01.ecsv -z 0.002665 -o features.ecsv
+jspec stitch SN2024aecx -z 0.002665 --outdir SN2024aecx --plot-default
+jspec detect SN2024aecx -z 0.002665 --outdir SN2024aecx
 jspec plot   SN2024aecx_2025-06-01.ecsv -z 0.002665 --bands --features -o spectrum.png
 jspec fit    SN2024aecx_2025-06-01.ecsv -z 0.002665 --line 12.814 --select
 ```
@@ -1118,7 +1118,7 @@ mean it.
 ## 5. Stitch the segments into one spectrum
 
 ```bash
-jspec stitch SN2024aecx -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
+jspec stitch SN2024aecx -z 0.002665 --outdir SN2024aecx --plot-default
 ```
 
 Point it at the output directory and it works out what to stitch by
@@ -1354,7 +1354,37 @@ SCALES = SN2024aecx_2025-06-01_s400a1_final=1.00000,SN2024aecx_2025-06-01_abi_co
 --keep-flagged        # stitch no-source segments instead of dropping them
 --strict              # exit non-zero if any join or segment is flagged
 --plot stitch.png     # per-join diagnostic figure — look at this
+--outdir DIR          # write everything here (see below)
+--plot-default        # with --outdir, name the diagnostic figures too
 ```
+
+#### Where the stitched spectra go
+
+`-o` names the file, and with several epochs the date is inserted before
+the extension, so one name still gives you one file per epoch:
+`-o SN2024aecx.ecsv` writes `SN2024aecx_2025-06-01.ecsv` and its
+siblings into the current directory.
+
+`--outdir` says *where* instead of *what*. On its own it is enough —
+the name is taken from the target folder you pointed at, so
+
+```bash
+jspec stitch SN2024aecx -z 0.002665 --outdir SN2024aecx --plot-default
+```
+
+writes `SN2024aecx/SN2024aecx_<date>.ecsv` and
+`SN2024aecx/SN2024aecx_stitch_<date>.png`, next to the reduction that
+produced them. The same works through a glob, since the target folder is
+still the first thing on the path:
+
+```bash
+jspec stitch "SN2024ahv/*/*/final/*.ecsv" -z 0.004833 --outdir SN2024ahv
+```
+
+The two combine: `-o lines.ecsv --outdir out/` writes
+`out/lines_<date>.ecsv`. An `-o` that already contains a directory wins
+outright and `--outdir` is ignored, so an explicit path is never
+silently relocated.
 
 ---
 
@@ -1461,7 +1491,70 @@ an unknown one.
 --top 20             # show only the N strongest
 --no-identify        # skip line matching, just detect
 --max-join-fraction 0.5
+--outdir DIR         # one feature table per input, written here
 ```
+
+### Every epoch at once
+
+`detect` takes the same kinds of input as `stitch` — files, a glob, or
+the target folder — so once the per-epoch spectra are sitting in
+`SN2024aecx/` you can do the whole set in one go:
+
+```bash
+jspec detect SN2024aecx --outdir SN2024aecx
+```
+
+```
+using REDSHIFT=0.002665 from SN2024aecx_2025-01-16.ecsv
+======================================================================
+2025-01-16  (SN2024aecx_2025-01-16.ecsv)
+======================================================================
+340 features at S/N > 5 (175 emission, 165 absorption; 0 overlap a segment join)
+...
+wrote SN2024aecx/SN2024aecx_2025-01-16_features.ecsv
+
+1438 features across 4 epochs:
+   340  SN2024aecx_2025-01-16_features.ecsv
+   447  SN2024aecx_2025-06-01_features.ecsv
+   298  SN2024aecx_2025-12-07_features.ecsv
+   353  SN2024aecx_2025-12-27_features.ecsv
+```
+
+One table per epoch, not one merged table. A feature belongs to the
+spectrum it was measured in: the same line changes width, strength and
+even sign between epochs, and that change is usually the thing you are
+trying to measure, so flattening them together would destroy it. Each
+table carries `SOURCE`, `EPOCH` and `REDSHIFT` in its metadata, which is
+what you need to stack them yourself later.
+
+Pointed at a directory, `detect` reads the spectra sitting *directly*
+inside it and does not descend into the per-instrument reduction tree —
+those are the segments you already stitched. Files with no wavelength
+column (a feature table from a previous run, say) are recognised and
+skipped rather than being analysed as if they were spectra.
+
+With several inputs, `-o` cannot name them all, so it becomes the
+suffix: `-o lines.ecsv` gives `SN2024aecx_2025-06-01_lines.ecsv`. With a
+single input it is still just the file name.
+
+#### You do not have to repeat `-z`
+
+`jspec stitch` records the redshift it used in the output file, and
+`detect`, `plot` and `fit` read it back, so `-z` is optional on anything
+built by `stitch` — it is reported so you can see which value is in
+play. It is still required for a raw per-instrument product straight out
+of a reduction pipeline, which has no redshift stored; without one you
+get a warning, and rest wavelengths and identifications will be wrong.
+
+Passing `-z` always wins. If it disagrees with the stored value you get
+
+```
+! -z 0.05 overrides REDSHIFT=0.002665 stored in SN2024aecx_2025-06-01.ecsv;
+  using 0.05. If the stored value is the right one, drop -z.
+```
+
+which is worth reading, because a wrong redshift shifts every line by
+the same amount and the identifications will still look plausible.
 
 In Python:
 
@@ -1538,9 +1631,22 @@ suspect the physics.
 ## 9. Plot
 
 ```bash
-jspec plot SN2024aecx_2025-06-01.ecsv -z 0.002665 \
-    --bands --features --regions -o spectrum.png
+jspec plot SN2024aecx_2025-06-01.ecsv --bands --features --regions -o spectrum.png
 ```
+
+Like `stitch` and `detect`, it takes a folder or a glob as well as a
+file, so one command covers every epoch:
+
+```bash
+jspec plot SN2024aecx --features --regions \
+    --features-from SN2024aecx --outdir figures -o spectrum.png
+```
+
+writes `figures/SN2024aecx_2025-01-16_spectrum.png` and its siblings.
+`--features-from` reuses the tables `jspec detect` already wrote instead
+of detecting again — faster, and the figure then matches the table you
+saved. `-z` is optional on a stitched spectrum, which stores its own
+redshift.
 
 - `--bands` shades known dust and molecular bands as labelled `axvspan`
   regions — CO fundamental and overtone, SiO, AlO, PAH, silicate. Filter
@@ -1549,20 +1655,106 @@ jspec plot SN2024aecx_2025-06-01.ecsv -z 0.002665 \
 - `--regions` shades the high-S/N regions.
 - `--rebin 3`, `--log`, `--range 5 20`, `--width`, `--height`, `--dpi` for
   presentation.
+- `--max-labels` / `--label-snr` control how much is marked. A real
+  spectrum has several hundred detections and labelling them all hides
+  the spectrum, so the default is the 60 strongest.
 
-In Python the pieces are separate, so you can build your own figure:
+### In Python
+
+One call does the whole thing, and it takes a path — you do not have to
+load anything first:
 
 ```python
-import matplotlib.pyplot as plt
-from jspec.plotting import (plot_spectrum, plot_dust_bands, plot_features,
-                            plot_high_snr, plot_decomposition,
-                            plot_stitch_diagnostics)
+import jspec
 
-ax = plot_spectrum(sp)
-plot_dust_bands(ax, redshift=0.002665, kinds=["pah", "silicate"])
-plot_features(ax, feats, max_labels=25)
-plot_high_snr(ax, regions)
+fig, ax = jspec.quicklook("SN2024aecx/SN2024aecx_2025-06-01.ecsv")
+fig.savefig("spectrum.png", dpi=160, bbox_inches="tight")
 ```
+
+That reads the spectrum (including its stored redshift), shades the dust
+and molecular bands, detects and identifies the features, marks the
+high-S/N regions, and hands back the Matplotlib `fig, ax` so you can
+carry on. `output=` saves it for you.
+
+If you already ran `jspec detect`, point at the table instead of
+detecting again — faster, and guaranteed to agree with the numbers you
+saved:
+
+```python
+fig, ax = jspec.quicklook(
+    "SN2024aecx/SN2024aecx_2025-06-01.ecsv",
+    features="SN2024aecx/SN2024aecx_2025-06-01_features.ecsv",
+    kinds=["pah", "silicate"],
+    max_labels=25,
+    output="spectrum.png")
+```
+
+Useful keywords: `redshift=` (only if the file has none or you want to
+override it), `bands=False`, `features=False`, `regions=False` to drop a
+layer, `snr=` / `region_snr=` detection thresholds, `label_snr=` /
+`max_labels=` for how much gets marked, `rest=`, `log_y=`, `rebin=`,
+`range` via `sp.select()`, `ax=` to draw into your own axes, and
+`title=`.
+
+A real spectrum yields several hundred detections, so by default only
+the `max_labels` strongest are marked — all of them would bury the
+spectrum under a picket fence. Set `label_snr` to mark everything above
+a S/N instead.
+
+#### Building the figure up yourself
+
+The individual functions are still there. **The spectrum always comes
+first and the axes are the `ax=` keyword** — this is the easy one to get
+backwards:
+
+```python
+from jspec.plotting import plot_spectrum, plot_dust_bands, plot_features
+
+path = "SN2024aecx/SN2024aecx_2025-06-01.ecsv"
+
+ax = plot_spectrum(path)
+plot_dust_bands(path, ax=ax, kinds=["pah", "silicate"])
+plot_features(path, "SN2024aecx/SN2024aecx_2025-06-01_features.ecsv",
+              ax=ax, max_labels=25)
+ax.figure.savefig("spectrum.png", dpi=160, bbox_inches="tight")
+```
+
+Anywhere a spectrum is wanted you may pass a `Spectrum`, an astropy
+`Table`, or a path; anywhere features are wanted, a list of `Feature`
+objects, a `Table`, or the path to one. Getting the argument order wrong
+tells you so:
+
+```
+TypeError: expected a Spectrum, an astropy Table, or a path to a spectrum
+file, got Axes. If you meant to pass an Axes, note that the spectrum comes
+first and the axes are the keyword `ax=`.
+```
+
+`plot_high_snr()` is the exception: regions are not saved to disk, so it
+needs the objects. When you want them without `quicklook`:
+
+```python
+from jspec.continuum import decompose
+from jspec.features import find_features, high_snr_regions, identify
+from jspec.plotting import plot_high_snr
+from jspec.spectrum import read_spectrum
+
+sp = read_spectrum(path)                 # redshift comes from the file
+dec = decompose(sp)                      # continuum / broad / narrow
+feats = identify(find_features(sp, decomposition=dec, snr_min=5.0))
+regions = high_snr_regions(sp, decomposition=dec, snr_min=15.0,
+                           features=feats)
+plot_high_snr(sp, regions, ax=ax)
+```
+
+So: `sp` is a `Spectrum`, `feats` is a list of `Feature`, and `regions`
+is a list of `Region` — the same three things `quicklook` builds for
+you. A saved feature table comes back with
+`jspec.features.features_from_table(path)`.
+
+Figures are saved with `bbox_inches="tight"`, which matters: the feature
+labels deliberately overflow the top of the axes, and without it they
+are cut off.
 
 `plot_decomposition()` shows continuum / broad / narrow stacked — the first
 thing to look at when a detection surprises you. `plot_stitch_diagnostics()`

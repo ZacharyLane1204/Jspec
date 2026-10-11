@@ -26,6 +26,8 @@ Conventions
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 
 from .spectrum import Spectrum
@@ -38,6 +40,7 @@ __all__ = [
     "plot_decomposition",
     "plot_stitch_diagnostics",
     "annotate_lines",
+    "quicklook",
 ]
 
 _KIND_DEFAULT_COLORS = {
@@ -49,6 +52,52 @@ _KIND_DEFAULT_COLORS = {
     "carbon": "#7f7f7f",
     "other": "#e377c2",
 }
+
+
+def _as_spectrum(obj, redshift=0.0, **kw):
+    """Accept a Spectrum, a Table, or a path to one.
+
+    Every plotting entry point runs its first argument through this, so
+    ``plot_spectrum("SN2024aecx_2025-06-01.ecsv")`` works as well as
+    ``plot_spectrum(sp)``. Reading a file is the overwhelmingly common
+    case at a prompt, and making the caller remember the reader import
+    buys nothing.
+    """
+    import os
+
+    from .spectrum import Spectrum as _S
+
+    if isinstance(obj, _S):
+        return obj
+    if isinstance(obj, (str, os.PathLike)):
+        from .spectrum import read_spectrum
+        return read_spectrum(str(obj), redshift=redshift, **kw)
+
+    from astropy.table import Table
+    if isinstance(obj, Table):
+        from .spectrum import _table_to_spectrum
+        return _table_to_spectrum(obj, redshift)
+    raise TypeError(
+        f"expected a Spectrum, an astropy Table, or a path to a spectrum "
+        f"file, got {type(obj).__name__}. If you meant to pass an Axes, note "
+        f"that the spectrum comes first and the axes are the keyword `ax=`.")
+
+
+def _as_features(obj):
+    """Accept a list of Features, a Table, or a path to a saved one."""
+    import os
+
+    if obj is None:
+        return []
+    if isinstance(obj, (str, os.PathLike)):
+        from .features import features_from_table
+        return features_from_table(str(obj))
+
+    from astropy.table import Table
+    if isinstance(obj, Table):
+        from .features import features_from_table
+        return features_from_table(obj)
+    return list(obj)
 
 
 def _axis_wave(spectrum: Spectrum, rest):
@@ -84,6 +133,7 @@ def plot_spectrum(spectrum: Spectrum, ax=None, rest=None, show_err=True,
         silently drop.
     """
     import matplotlib.pyplot as plt
+    spectrum = _as_spectrum(spectrum)
 
     if ax is None:
         _, ax = plt.subplots(figsize=(12, 4.2))
@@ -154,6 +204,7 @@ def plot_dust_bands(spectrum: Spectrum = None, bands=None, ax=None, rest=None,
     silently.
     """
     import matplotlib.pyplot as plt
+    spectrum = _as_spectrum(spectrum) if spectrum is not None else None
 
     from .linedb import load_bands
 
@@ -216,6 +267,26 @@ def plot_dust_bands(spectrum: Spectrum = None, bands=None, ax=None, rest=None,
     return ax
 
 
+def _add_headroom(ax, top=0.0, bottom=0.0):
+    """Grow the y-range by a fraction of itself, without shrinking it.
+
+    Called more than once (bands, then features) this must not compound,
+    so it tracks what it has already added.
+    """
+    lo, hi = ax.get_ylim()
+    span = hi - lo
+    if not np.isfinite(span) or span <= 0:
+        return
+    have = getattr(ax, "_jspec_headroom", (0.0, 0.0))
+    base = span / (1.0 + have[0] + have[1])
+    want = (max(top, have[0]), max(bottom, have[1]))
+    if want == have:
+        return
+    ax.set_ylim(lo - base * (want[1] - have[1]),
+                hi + base * (want[0] - have[0]))
+    ax._jspec_headroom = want
+
+
 def plot_features(spectrum: Spectrum, features, ax=None, rest=None,
                   label=True, label_size=7, min_snr=0.0, components=None,
                   signs=None, mark_joins=True, max_labels=60,
@@ -234,6 +305,8 @@ def plot_features(spectrum: Spectrum, features, ax=None, rest=None,
     labels is worse than drawing the 60 that matter.
     """
     import matplotlib.pyplot as plt
+    spectrum = _as_spectrum(spectrum)
+    features = _as_features(features)
 
     if ax is None:
         _, ax = plt.subplots(figsize=(13, 4.6))
@@ -248,6 +321,20 @@ def plot_features(spectrum: Spectrum, features, ax=None, rest=None,
 
     labelled = sorted(sel, key=lambda f: -f.integrated_snr)[:max_labels]
     label_set = {id(f) for f in labelled}
+
+    # Rotated labels sit outside the marker span and so outside the axes
+    # box. Clipping them to it truncates every one of them, which is how
+    # you end up with a row of two-character stubs; let them overflow and
+    # save with bbox_inches="tight" instead. The extra headroom keeps the
+    # markers off the spectrum itself.
+    if sel and label:
+        has_abs = any(f.sign != "emission" for f in labelled)
+        # Emission labels overflow the top of the axes, where there is
+        # nothing but whitespace; absorption labels cannot do the same at
+        # the bottom without landing on the tick labels and the axis
+        # title, so they are drawn upward into reserved space inside the
+        # axes instead.
+        _add_headroom(ax, top=0.30, bottom=0.42 if has_abs else 0.12)
 
     for f in sel:
         x = f.rest_center if rest else f.center
@@ -267,10 +354,11 @@ def plot_features(spectrum: Spectrum, features, ax=None, rest=None,
             if artefact:
                 txt += " (join)"
             va, yy = (("bottom", y1 + 0.005) if f.sign == "emission"
-                      else ("top", y0 - 0.005))
+                      else ("bottom", y1 + 0.005))
             ax.text(x, yy, txt, rotation=90, ha="center", va=va,
                     fontsize=label_size, color=color,
-                    transform=ax.get_xaxis_transform(), clip_on=True, zorder=5)
+                    transform=ax.get_xaxis_transform(),
+                    clip_on=f.sign != "emission", zorder=5)
     return ax
 
 
@@ -285,6 +373,8 @@ def plot_high_snr(spectrum: Spectrum, regions, ax=None, rest=None,
     is in them" in one pass.
     """
     import matplotlib.pyplot as plt
+    spectrum = _as_spectrum(spectrum)
+    features = _as_features(features) if features is not None else None
 
     if ax is None:
         _, ax = plt.subplots(figsize=(13, 4.6))
@@ -435,3 +525,119 @@ def annotate_lines(ax, lines, rest=True, redshift=0.0, y=0.5, color="0.3",
                 ha="right", va="center", fontsize=fontsize, color=color,
                 transform=ax.get_xaxis_transform(), clip_on=True, zorder=3)
     return ax
+
+
+def quicklook(spectrum, redshift=None, features=None, regions=None,
+              bands=True, kinds=None, names=None, snr=5.0, region_snr=15.0,
+              label_snr=0.0, max_labels=40, rest=None, log_y=False, rebin=1,
+              ax=None, figsize=(13, 5.2), title=None, output=None, dpi=160,
+              **kwargs):
+    """Draw a labelled spectrum in one call -- the batteries-included plot.
+
+    Everything is optional except the spectrum, and the spectrum may be a
+    path:
+
+    >>> quicklook("SN2024aecx/SN2024aecx_2025-06-01.ecsv")   # doctest: +SKIP
+
+    That shades the known dust and molecular bands, detects features,
+    identifies them, marks the high-S/N regions, and returns ``(fig, ax)``
+    so you can keep working on the figure.
+
+    The individual ``plot_*`` functions are still there when you want to
+    build a figure up piece by piece, but they need a Spectrum, a list of
+    Features and a list of Regions, and producing those means knowing
+    about :mod:`jspec.continuum` and :mod:`jspec.features`. This does
+    that for you.
+
+    Parameters
+    ----------
+    spectrum : Spectrum, Table or path
+    redshift : float, optional
+        Overrides whatever the file stores. A stitched spectrum already
+        carries its redshift, so this is usually unnecessary.
+    features, regions : optional
+        Pre-computed, or a path to a table saved by ``jspec detect``. Pass
+        ``False`` to skip that layer, or leave as ``None`` to compute it.
+    bands : bool
+        Shade known dust/molecular bands.
+    snr, region_snr : float
+        Detection thresholds, used only when features/regions are computed.
+    label_snr, max_labels : float, int
+        Which features are marked and labelled. By default only the
+        ``max_labels`` strongest are drawn: a real spectrum yields
+        several hundred detections, and marking all of them produces a
+        picket fence that hides the spectrum underneath. Set
+        ``label_snr`` explicitly to mark everything above a threshold,
+        or ``max_labels=None`` for no cap.
+    output : path, optional
+        Save the figure here as well as returning it.
+    """
+    import matplotlib.pyplot as plt
+
+    if isinstance(spectrum, (str, os.PathLike)) and title is None:
+        title = os.path.basename(str(spectrum))
+    sp = _as_spectrum(spectrum, redshift=redshift or 0.0)
+    if redshift is not None and redshift != sp.redshift:
+        sp = sp.with_redshift(redshift)
+
+    fig = None
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+    else:
+        fig = ax.figure
+
+    if bands:
+        plot_dust_bands(sp, ax=ax, kinds=kinds, names=names, rest=rest,
+                        log_y=log_y, rebin=rebin, **kwargs)
+    else:
+        plot_spectrum(sp, ax=ax, rest=rest, log_y=log_y, rebin=rebin, **kwargs)
+
+    # Only decompose if something actually needs it -- it is the expensive
+    # step, and a bands-only plot does not.
+    need = (features is not False or regions is not False)
+    feats = _as_features(features) if features not in (None, False) else None
+    regs = regions if regions not in (None, False) else None
+    if isinstance(regs, (str, os.PathLike)):
+        raise TypeError("regions cannot be read from a file; leave it as "
+                        "None to compute them, or pass a list of Regions")
+
+    if need and (feats is None or regs is None):
+        from .continuum import decompose
+        from .features import find_features, high_snr_regions, identify
+        dec = decompose(sp)
+        if feats is None and features is not False:
+            feats = identify(find_features(sp, decomposition=dec, snr_min=snr))
+        if regs is None and regions is not False:
+            regs = high_snr_regions(sp, decomposition=dec,
+                                    snr_min=region_snr, features=feats or None)
+
+    if regs:
+        plot_high_snr(sp, regs, ax=ax, rest=rest, label=False)
+    if feats:
+        # Markers and labels should agree. plot_features caps labels but
+        # marks everything above min_snr, so derive the threshold from
+        # max_labels and the N-th strongest feature -- otherwise a few
+        # dozen labels sit on top of several hundred tick marks.
+        thresh = label_snr
+        if not label_snr and max_labels and len(feats) > max_labels:
+            ranked = sorted((f.integrated_snr for f in feats), reverse=True)
+            thresh = ranked[max_labels - 1]
+            print(f"marking the {max_labels} strongest of {len(feats)} "
+                  f"features (S/N > {thresh:.0f}); raise max_labels or set "
+                  f"label_snr to change that")
+        plot_features(sp, feats, ax=ax, rest=rest, min_snr=thresh,
+                      max_labels=max_labels or len(feats))
+
+    if title:
+        # Feature labels overflow the top of the axes, so a title at the
+        # default pad lands on top of them.
+        used = getattr(ax, "_jspec_headroom", (0.0, 0.0))[0]
+        pad = None
+        if used:
+            ax_pts = ax.get_position().height * fig.get_size_inches()[1] * 72
+            pad = 6.0 + used * ax_pts
+        ax.set_title(title, pad=pad)
+    if output:
+        fig.savefig(output, dpi=dpi, bbox_inches="tight")
+        print(f"wrote {output}")
+    return fig, ax

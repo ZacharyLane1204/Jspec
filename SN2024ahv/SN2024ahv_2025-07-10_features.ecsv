@@ -1,0 +1,38 @@
+# %ECSV 1.0
+# ---
+# datatype:
+# - {name: rest_center_um, datatype: float64}
+# - {name: center_um, datatype: float64}
+# - {name: center_err_um, datatype: float64}
+# - {name: lo_um, datatype: float64}
+# - {name: hi_um, datatype: float64}
+# - {name: component, datatype: string}
+# - {name: sign, datatype: string}
+# - {name: peak_snr, datatype: float64}
+# - {name: integrated_snr, datatype: float64}
+# - {name: flux, datatype: float64}
+# - {name: eqw_um, datatype: float64}
+# - {name: fwhm_um, datatype: float64}
+# - {name: fwhm_kms, datatype: float64}
+# - {name: intrinsic_fwhm_kms, datatype: float64}
+# - {name: width_class, datatype: string}
+# - {name: resolution_fwhm_kms, datatype: float64}
+# - {name: on_join, datatype: bool}
+# - {name: join_fraction, datatype: float64}
+# - {name: segments, datatype: string}
+# - {name: best_id, datatype: string}
+# - {name: best_id_species, datatype: string}
+# - {name: best_id_velocity_kms, datatype: float64}
+# - {name: n_candidates, datatype: int64}
+# - {name: bands, datatype: string}
+# meta: !!omap
+# - {SOURCE: SN2024ahv_2025-07-10.ecsv}
+# - {EPOCH: '2025-07-10'}
+# - {REDSHIFT: 0.004833}
+# schema: astropy-2.0
+rest_center_um center_um center_err_um lo_um hi_um component sign peak_snr integrated_snr flux eqw_um fwhm_um fwhm_kms intrinsic_fwhm_kms width_class resolution_fwhm_kms on_join join_fraction segments best_id best_id_species best_id_velocity_kms n_candidates bands
+1.0433181603634707 1.0483605170325074 0.0003812042625394618 0.9906649589538574 1.0967018604278564 broad emission 438.6560051552167 41.04438290615815 4.233427035679922e-08 0.2725782308668539 0.0412893134137684 11807.221424633428 11801.120232644982 broad 379.52473566272886 False 0.0 SN2024ahv_2025-07-10_s400a1_final "" "" nan 0 ""
+1.3783331758057495 1.384994660044419 0.0028206999872468115 1.3697426319122314 1.429030418395996 broad emission 8.27249926664747 3.856520262703477 1.896037277115543e-09 0.001472173998341558 0.05928778648376465 12833.285031421665 12829.740028656008 broad 301.6214428933581 False 0.0 SN2024ahv_2025-07-10_s400a1_final "" "" nan 0 ""
+3.288811538126114 3.3047063642898777 0.0013889043911801246 3.2853543758392334 3.3215713500976562 broad absorption 11.30144242641973 9.185025100826708 -1.628809808716089e-08 -0.05149837158575029 0.03621697425842285 3285.488796094116 3264.506613268382 broad 370.7198419116031 False 0.0 SN2024ahv_2025-07-10_s400a1_final Pf-delta "H I" -743.6604866352793 1 "Amorphous carbon;H2O ice 3.05;PAH 3.3"
+3.367072390265072 3.3833454511272234 0.0015497234940461768 3.3455023765563965 3.4162983894348145 broad emission 11.519990382489723 12.499868447259118 3.906063397309462e-08 0.07352099226465351 0.06540730340323098 5795.629367930315 5784.317837371886 broad 361.9211608593465 False 0.0 SN2024ahv_2025-07-10_s400a1_final "" "" nan 0 "Amorphous carbon;H2O ice 3.05;PAH 3.3"
+3.512315007523852 3.529290025955215 0.002062347301448959 3.5085155963897705 3.5537261962890625 broad emission 5.244900561511796 7.006075921445327 1.3553436685173599e-08 0.021236349838362083 0.04521059989929199 3840.3749116070207 3824.6976151587833 broad 346.65200749361065 False 0.0 SN2024ahv_2025-07-10_s400a1_final "" "" nan 0 "Amorphous carbon"

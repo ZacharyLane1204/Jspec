@@ -59,7 +59,16 @@ from .epochs import (
     check_single_epoch,
 )
 
+def quicklook(*args, **kwargs):
+    """Draw a labelled spectrum in one call. See
+    :func:`jspec.plotting.quicklook` -- imported lazily so that importing
+    jspec does not drag in matplotlib."""
+    from .plotting import quicklook as _q
+    return _q(*args, **kwargs)
+
+
 __all__ = [
+    "quicklook",
     "check_single_epoch",
     "group_segments_by_epoch",
     "group_paths_by_epoch",

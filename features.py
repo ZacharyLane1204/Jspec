@@ -47,6 +47,7 @@ a precise-looking value that is dominated by how well you happen to know R.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -63,6 +64,7 @@ __all__ = [
     "high_snr_regions",
     "identify",
     "features_table",
+    "features_from_table",
 ]
 
 _FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
@@ -653,3 +655,81 @@ def features_table(features):
     if not rows:
         return Table()
     return Table(rows)
+
+
+def features_from_table(table):
+    """Rebuild :class:`Feature` objects from a table written by
+    :func:`features_table`, or from the path to one.
+
+    ``jspec detect`` saves its results, and the obvious next thing to do
+    is plot them -- but the plotting functions take Feature objects, not
+    a table, so without this you would have to re-run the detection just
+    to draw it. Two fields (``amplitude`` and ``continuum_level``) are
+    not written to the table and come back as NaN; nothing in plotting
+    or identification uses them.
+
+    The best identification is restored as a single-element ``matches``
+    list, which is what ``best_match`` and the plot labels read. The
+    rejected alternatives are not in the table, so ``n_candidates`` is
+    preserved in ``_n_candidates`` rather than being faked.
+    """
+    from astropy.table import Table
+
+    from .linedb import LineMatch
+
+    if isinstance(table, (str, os.PathLike)):
+        table = Table.read(table)
+    if not len(table):
+        return []
+
+    def col(row, name, default=np.nan):
+        try:
+            v = row[name]
+        except KeyError:
+            return default
+        return default if v is None else v
+
+    out = []
+    for row in table:
+        label = str(col(row, "best_id", "") or "")
+        matches = []
+        if label:
+            rest_um = float(col(row, "rest_center_um"))
+            v = float(col(row, "best_id_velocity_kms"))
+            # The table stores the line's velocity offset, not its
+            # laboratory wavelength, so recover the latter from the two.
+            lab = rest_um / (1.0 + v / C_KMS) if np.isfinite(v) else rest_um
+            matches.append(LineMatch(
+                label=label, species=str(col(row, "best_id_species", "") or ""),
+                rest_um=lab, observed_rest_um=rest_um, velocity_kms=v,
+                delta_um=rest_um - lab, category="", kind="",
+                expected_width=str(col(row, "width_class", "") or "")))
+
+        segs = str(col(row, "segments", "") or "")
+        bands = str(col(row, "bands", "") or "")
+        f = Feature(
+            center=float(col(row, "center_um")),
+            rest_center=float(col(row, "rest_center_um")),
+            center_err=float(col(row, "center_err_um")),
+            lo=float(col(row, "lo_um")), hi=float(col(row, "hi_um")),
+            component=str(col(row, "component", "") or ""),
+            sign=str(col(row, "sign", "") or ""),
+            peak_snr=float(col(row, "peak_snr")),
+            integrated_snr=float(col(row, "integrated_snr")),
+            amplitude=np.nan,
+            flux=float(col(row, "flux")),
+            eqw_um=float(col(row, "eqw_um")),
+            fwhm_um=float(col(row, "fwhm_um")),
+            fwhm_kms=float(col(row, "fwhm_kms")),
+            intrinsic_fwhm_kms=float(col(row, "intrinsic_fwhm_kms")),
+            width_class=str(col(row, "width_class", "") or ""),
+            resolution_fwhm_kms=float(col(row, "resolution_fwhm_kms")),
+            continuum_level=np.nan,
+            on_join=bool(col(row, "on_join", False)),
+            join_fraction=float(col(row, "join_fraction", 0.0)),
+            segments=tuple(x for x in segs.split("+") if x),
+            matches=matches,
+            bands=[x for x in bands.split(";") if x])
+        f._n_candidates = int(col(row, "n_candidates", len(matches)) or 0)
+        out.append(f)
+    return out
