@@ -1,0 +1,42 @@
+{
+    "asn_type": "None",
+    "asn_rule": "DMSLevel2bBase",
+    "version_id": null,
+    "code_version": "3.0.0",
+    "degraded_status": "No known degraded exposures in association.",
+    "program": "04217",
+    "constraints": "No constraints",
+    "asn_id": "a3001",
+    "asn_pool": "none",
+    "products": [
+        {
+            "name": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00003_nrs2",
+            "members": [
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00003_nrs2_rate.fits",
+                    "exptype": "science"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00001_nrs2_rate.fits",
+                    "exptype": "background"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00002_nrs2_rate.fits",
+                    "exptype": "background"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00001_nrs2_rate.fits",
+                    "exptype": "selfcal"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00002_nrs2_rate.fits",
+                    "exptype": "selfcal"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-08-17/stage1/jw04217005001_04104_00003_nrs2_rate.fits",
+                    "exptype": "selfcal"
+                }
+            ]
+        }
+    ]
+}

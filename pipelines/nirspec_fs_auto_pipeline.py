@@ -75,7 +75,8 @@ from jwst.associations.lib.rules_level2_base import DMSLevel2bBase         # noq
 from jwst.associations.lib.rules_level3_base import DMS_Level3_Base        # noqa: E402
 
 from jspec.layout import (                                                 # noqa: E402
-    ensure_epoch_tree, find_staged_uncal, stage_files)
+    ensure_epoch_tree, find_staged_uncal, stage_files,
+    canonical_tag, canon_object as canon_target, product_basename)
 from jspec.manifest import MANIFEST_NAME, record_product                   # noqa: E402
 
 from jspec.pipelines.nirspec_fs_refining import (                                          # noqa: E402
@@ -104,9 +105,17 @@ def mast_login():
             print(f"  WARNING: MAST login failed ({exc}); exclusive-access data will not download.")
 
 
-def list_mast_uncal(proposal_padded, proposal_num, manifest_path=None):
+def list_mast_uncal(proposal_padded, proposal_num, manifest_path=None,
+                    dispersed_only=True):
     """Every level-1 *_uncal.fits of the proposal as a list of dicts (name, uri,
-    size, rights, obs_id). NO size filtering: the old 'larger than the mean
+    size, rights, obs_id, filters, parent).
+
+    A NIRSPEC/SLIT observation also owns the visit's target-acquisition
+    exposures, which are taken with the grating wheel in MIRROR -- imaging,
+    not spectroscopy, on the same detector and with the same filename
+    pattern. ``dispersed_only`` drops them, which is almost always what you
+    want: they are discarded later anyway when exposures are grouped by
+    slit, so downloading them is pure cost. NO size filtering: the old 'larger than the mean
     product size' cut could silently drop smaller uncal files (short ramps,
     last segments of a segmented exposure, or whole configurations), because
     uncal files are 16-bit and the mean is dominated by float32 cal/rateints
@@ -136,6 +145,7 @@ def list_mast_uncal(proposal_padded, proposal_num, manifest_path=None):
         print(f"  (fallback query skipped: {exc})")
 
     found = {}
+    skipped = defaultdict(int)
     for i in range(0, len(obs_table), MAST_CHUNK):
         chunk = obs_table[i:i + MAST_CHUNK]
         try:
@@ -158,24 +168,44 @@ def list_mast_uncal(proposal_padded, proposal_num, manifest_path=None):
                 and str(p["productSubGroupDescription"]).upper() == "UNCAL" and name.endswith(".fits"))
             if not is_uncal or f"jw{proposal_padded}" not in name:
                 continue
+            filt = str(p["filters"]).strip().upper() if "filters" in cols else ""
+            # NIRSpec reports filter and grating joined, e.g. "F290LP;G395M";
+            # MIRROR in the grating slot means no dispersive element.
+            if dispersed_only and "MIRROR" in filt:
+                skipped[filt] += 1
+                continue
             try:
                 size = int(p["size"])
             except Exception:
                 size = 0
+            # obs_id on a product row is the *exposure*; parent_obsid is what
+            # ties it back to the observation the loop above listed.
             found[name] = dict(name=name, uri=uri, size=size,
                                rights=str(p["dataRights"]) if "dataRights" in cols else "?",
-                               obs_id=str(p["obs_id"]) if "obs_id" in cols else "?")
+                               obs_id=str(p["obs_id"]) if "obs_id" in cols else "?",
+                               filters=filt,
+                               parent=str(p["parent_obsid"]) if "parent_obsid" in cols else "")
     entries = [found[k] for k in sorted(found)]
 
-    # observation-level summary: which observations contributed how many uncal files
-    per_obs = defaultdict(int)
+    if skipped:
+        total = sum(skipped.values())
+        detail = ", ".join(f"{f} x{n}" for f, n in sorted(skipped.items()))
+        print(f"  Skipped {total} target-acquisition exposure(s) taken with the "
+              f"grating wheel in MIRROR ({detail}).")
+        print(f"  These share the NIRSPEC/SLIT observation but are images, not "
+              f"spectra. Pass --all-exp-types to download them too.")
+
+    # Observation-level summary. Products carry the parent observation's numeric
+    # obsid, not its obs_id string, so map one to the other -- comparing the
+    # strings directly matches nothing and makes every observation look empty.
+    by_parent = defaultdict(int)
     for e in entries:
-        per_obs[e["obs_id"]] += 1
-    print(f"  {len(entries)} uncal exposure file(s) in {len(per_obs)} observation(s):")
+        by_parent[e["parent"]] += 1
+    print(f"  {len(entries)} uncal exposure file(s) in {len(obs_table)} observation(s):")
     for row in obs_table:
         oid = str(row["obs_id"])
         extra = "  ".join(f"{c}={row[c]}" for c in ("target_name", "filters") if c in obs_table.colnames)
-        n_u = per_obs.get(oid, 0)
+        n_u = by_parent.get(str(row["obsid"]), 0)
         print(f"    {oid}: {n_u} uncal   {extra}" + ("   <-- NO uncal file listed" if n_u == 0 else ""))
     n_prop = sum(1 for e in entries if e["rights"].upper() not in ("PUBLIC", "?"))
     if n_prop:
@@ -184,33 +214,38 @@ def list_mast_uncal(proposal_padded, proposal_num, manifest_path=None):
 
     if manifest_path:
         with open(manifest_path, "w") as fh:
-            fh.write("# uncal files MAST lists for this proposal\n# name  size_MB  rights  obs_id\n")
+            fh.write("# uncal files MAST lists for this proposal\n"
+                     "# name  size_MB  rights  filter  obs_id\n")
             for e in entries:
-                fh.write(f"{e['name']}  {e['size'] / 1e6:.1f}  {e['rights']}  {e['obs_id']}\n")
+                fh.write(f"{e['name']}  {e['size'] / 1e6:.1f}  {e['rights']}  "
+                         f"{e.get('filters') or '?'}  {e['obs_id']}\n")
         print(f"  manifest: {manifest_path}")
     return entries
 
 
-def _complete(path, expected_size):
-    if not os.path.exists(path) or os.path.getsize(path) == 0:
-        return False
-    if expected_size and os.path.getsize(path) < 0.999 * expected_size:
-        return False                                   # truncated download
-    try:
-        fits.getheader(path, 0)
-    except Exception:
-        return False
-    return True
+# Shared with the other proposal-level pipelines: checks every extension
+# header, not just the primary one, so a truncated download is caught here
+# rather than deep inside the JWST pipeline as a missing ASDF extension.
+from jspec.pipelines.mast_uncal_download import _complete, fits_problem  # noqa: E402,F401
+from jspec.pipelines._multiproposal import main_per_proposal
 
 
-def query_and_download(proposal_padded, proposal_num, uncal_dir, manifest_path=None):
+def query_and_download(proposal_padded, proposal_num, uncal_dir, manifest_path=None,
+                       dispersed_only=True):
     mast_login()
-    entries = list_mast_uncal(proposal_padded, proposal_num, manifest_path)
+    entries = list_mast_uncal(proposal_padded, proposal_num, manifest_path,
+                              dispersed_only=dispersed_only)
     failed = []
     for i, e in enumerate(entries, 1):
         dest = os.path.join(uncal_dir, e["name"])
-        if _complete(dest, e["size"]):
+        why = fits_problem(dest, e["size"])
+        if why is None:
             continue                                   # already have it (restart-safe)
+        if why != "missing":
+            # Say so: a bad local file explains any earlier failure that
+            # pointed at it, and silently replacing it hides that.
+            print(f"  re-downloading {e['name']}: {why}")
+            os.remove(dest)
         for attempt in range(1, MAST_RETRIES + 1):
             print(f"  [{i}/{len(entries)}] downloading {e['name']} ({e['size'] / 1e6:.0f} MB)"
                   + (f"  attempt {attempt}" if attempt > 1 else ""))
@@ -220,9 +255,10 @@ def query_and_download(proposal_padded, proposal_num, uncal_dir, manifest_path=N
                 status = res[0] if isinstance(res, (tuple, list)) else res
             except Exception as exc:
                 status = f"exception: {exc}"
-            if _complete(dest, e["size"]):
+            why = fits_problem(dest, e["size"])
+            if why is None:
                 break
-            print(f"    not complete ({status})")
+            print(f"    not complete ({status}): {why}")
             if os.path.exists(dest):
                 os.remove(dest)                        # do not keep a truncated file
             time.sleep(3 * attempt)
@@ -552,14 +588,29 @@ def group_metas_by_epoch(metas, tag=None):
 
     `collect_exposures` has already assigned every exposure an
     `epoch_key` of (target, epoch_number) and an `epoch_date`; this just
-    turns that into the (tag, date) pair the directory layout uses. The
-    tag is the sanitised target name unless overridden, so one proposal
-    covering two targets still lands in two directory trees.
+    turns that into the (tag, date) pair the directory layout uses.
+
+    The tag is resolved **once for the whole run** from every target
+    name seen, not per epoch. Headers spell the same object differently
+    between visits ("SN 2024aecx" one epoch, "2024aecx" the next), and
+    deriving the tag per epoch turned that into two directory trees for
+    one target. `--tag` overrides it outright, which is the dependable
+    way to fix the capitalisation.
     """
     groups = defaultdict(list)
+    # Resolve one tag per *object*, not per epoch. Group the header
+    # spellings by their prefix-stripped, case-folded form so that
+    # "SN 2024aecx" and "2024aecx" are recognised as one target (and get
+    # one tag), while a genuinely different target in the same proposal
+    # still gets its own tag and its own directory tree.
+    by_object = defaultdict(list)
     for m in metas:
-        target = m["epoch_key"][0]
-        groups[(tag or sanitize(target) or "target", m["epoch_date"])].append(m)
+        by_object[canon_target(m["epoch_key"][0])].append(m["epoch_key"][0])
+    tag_for = {obj: canonical_tag(names, override=tag)
+               for obj, names in by_object.items()}
+    for m in metas:
+        stem_tag = tag_for[canon_target(m["epoch_key"][0])]
+        groups[(stem_tag, m["epoch_date"])].append(m)
     return dict(sorted(groups.items()))
 
 
@@ -581,7 +632,7 @@ def stage_epoch_uncal(metas, uncal_files, uncal_dir):
     return stage_files(wanted, uncal_dir)
 
 
-def build_groups(sci, spec2_dir, tag):
+def build_groups(sci, spec2_dir, stem_tag):
     """One group per (target, epoch, filter, grating, slit); same S200A1 +
     S200A2 merge as the notebook. Only exposures that produced a cal file."""
     grouped = defaultdict(list)
@@ -597,9 +648,16 @@ def build_groups(sci, spec2_dir, tag):
     for (ek, filt, grat, slit), members in sorted(grouped.items(), key=lambda kv: str(kv[0])):
         target, epoch = ek
         date = members[0]["epoch_date"]
-        product = f"{filt}_{grat}_{slit}_{sanitize(target)}_{date}{tag}".lower()
+        # <stem>_<filter>_<grating>_<slit>, e.g.
+        # SN2024aecx_2025-06-01_f290lp_g395m_s400a1. The epoch stem leads so
+        # that a Stage-3 product is identifiable on its own, the same way the
+        # MRS route names its products. Only the instrument-configuration
+        # tokens are lowercased; the stem keeps the capitalisation of --tag.
+        product = product_basename(
+            stem_tag, date, kind=f"{filt}_{grat}_{slit}".lower())
         groups.append(dict(
             product=product, target=target, epoch=epoch, epoch_date=date, slit=slit,
+            stem_tag=stem_tag,
             filter=filt, grating=grat, members=members,
             cal_files=[cal_path(m, spec2_dir) for m in members],
             mjd_min=min(m["mjd_start"] for m in members if m["mjd_start"] is not None) if any(m["mjd_start"] is not None for m in members) else None,
@@ -637,7 +695,7 @@ def run_spec3(groups, asn_dir, spec3_dir):
 # Final spectra
 # ===========================================================================
 
-def build_final_spectra(groups, spec3_dir, final_dir, tag):
+def build_final_spectra(groups, spec3_dir, final_dir, stem_tag):
     """One final spectrum per (target, epoch, slit): the Stage-3 x1d files of
     its gratings stitched together. Slits are never mixed."""
     os.makedirs(final_dir, exist_ok=True)
@@ -664,15 +722,19 @@ def build_final_spectra(groups, spec3_dir, final_dir, tag):
         mjds_lo = [g["mjd_min"] for g in gs if g["mjd_min"] is not None]
         mjds_hi = [g["mjd_max"] for g in gs if g["mjd_max"] is not None]
         meta = dict(TARGET=target, SLIT=slit, EPOCH=epoch, EPOCHDT=date,
+                    TAG=stem_tag, STEM=f"{stem_tag}_{date}",
                     GRATINGS=",".join(sorted({f"{g['grating']}/{g['filter']}" for g in gs})),
                     MJD_MIN=min(mjds_lo) if mjds_lo else None,
                     MJD_MAX=max(mjds_hi) if mjds_hi else None,
                     MJD_MEAN=0.5 * (min(mjds_lo) + max(mjds_hi)) if mjds_lo and mjds_hi else None,
                     EXTRACT="pipeline Stage-3 x1d")
-        base = os.path.join(final_dir, f"{sanitize(target)}_{slit.lower()}_{date}{tag}_final")
+        # <stem>_<slit>_final, e.g. SN2024aecx_2025-06-01_s400a1_final --
+        # the same <tag>_<date>_... shape the MRS route writes.
+        base = os.path.join(final_dir, product_basename(
+            stem_tag, date, kind=str(slit).lower(), suffix="final"))
         save_spectrum(base, wave, flux, err, unit, meta)
         plot_spectrum(base + ".png", [(p["label"], p["wave"], p["flux"]) for p in pieces] + [("stitched", wave, flux)],
-                      unit, title=f"{target}  {slit}  {date}")
+                      unit, title=f"{stem_tag}  {slit}  {date}")
         outputs[f"{target}_{slit}_{date}"] = base + ".fits"
     return outputs
 
@@ -724,16 +786,23 @@ def print_funnel(uncal_counts, sci, spec2_dir, groups, finals, required=None, sp
 # Main
 # ===========================================================================
 
+
 def main():
     import matplotlib
     matplotlib.use("Agg")
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--proposal", required=True, help="JWST proposal number, e.g. 9258")
+    p.add_argument("--proposal", required=True, metavar="ID [ID ...]", help="JWST proposal/program number, e.g. 9258. Several may be given (--proposal A B C, or A,B,C); they are downloaded and reduced one after another into the same --outdir, and sort into epochs by observation date rather than by program.")
     p.add_argument("--outdir", required=True,
                help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     p.add_argument("--target", default=None, help="Only process science targets whose name contains this (case-insensitive)")
-    p.add_argument("--tag", default=None, help="Appended to the output dir and to product / final-spectrum names")
+    p.add_argument("--tag", default=None,
+                   help="Name used for this target in epoch directory names and in every product "
+                        "filename: <outdir>/NIRSpec-FS/<tag>_<YYYY-MM-DD>/... and "
+                        "<tag>_<YYYY-MM-DD>_<slit>_final.ecsv. Defaults to the target name from "
+                        "the headers, resolved to one spelling across all epochs. Set it (e.g. "
+                        "--tag SN2024aecx) to control the capitalisation, and use the same value "
+                        "for every instrument so the epoch stems match across the output tree.")
     p.add_argument("--max-epoch-gap-days", type=float, default=1.0,
                    help="Exposures of a target further apart than this belong to different epochs (default 1.0)")
     p.add_argument("--plan-only", action="store_true", help="Download (unless --skip-download), print the epoch grouping and stop")
@@ -750,13 +819,18 @@ def main():
     p.add_argument("--require-slit", nargs="+", default=None, metavar="SLIT",
                    help="Stop before Stage 1 if any epoch lacks one of these slits, e.g. --require-slit S400A1")
     p.add_argument("--redo", action="store_true", help="Re-run Stage 1 even if the rate file already exists")
+    p.add_argument("--all-exp-types", action="store_true",
+                   help="Download every exposure the NIRSPEC/SLIT observations own, not just the "
+                        "dispersed ones. A NIRSPEC/SLIT observation also contains the visit's "
+                        "target-acquisition images, taken with the grating wheel in MIRROR; they "
+                        "are not spectra and are dropped later when exposures are grouped by slit, "
+                        "so by default they are not downloaded.")
     p.add_argument("--list-mast", action="store_true",
                    help="Only list the uncal files MAST has for the proposal (writes mast_uncal_manifest.txt) and stop")
     args = p.parse_args()
 
     proposal_num = int(args.proposal)
     padded = f"{proposal_num:05d}"
-    tag = f"_{args.tag}" if args.tag else ""
     outdir = os.path.abspath(args.outdir)   # absolute: association files need it
     os.makedirs(outdir, exist_ok=True)
 
@@ -773,12 +847,14 @@ def main():
     manifest = os.path.join(outdir, "mast_uncal_manifest.txt")
     if args.list_mast:
         mast_login()
-        list_mast_uncal(padded, proposal_num, manifest)
+        list_mast_uncal(padded, proposal_num, manifest,
+                        dispersed_only=not args.all_exp_types)
         return
     if args.skip_download or args.from_stage > 1:
         uncal = find_staged_uncal(outdir, download_dir)
     else:
-        uncal = query_and_download(padded, proposal_num, download_dir, manifest)
+        uncal = query_and_download(padded, proposal_num, download_dir, manifest,
+                                   dispersed_only=not args.all_exp_types)
     if not uncal:
         raise SystemExit("No uncal files to process.")
 
@@ -855,7 +931,7 @@ def main():
                       args.no_pixel_background, args.source_type)
             print(f"Stage 2 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
 
-        groups = build_groups(sci, paths["stage2"], tag)
+        groups = build_groups(sci, paths["stage2"], tag_name)
         if not groups:
             print(f"  WARNING: no Stage-2 cal files for {stem} -- skipping.")
             continue
@@ -866,7 +942,7 @@ def main():
             print(f"Stage 3 done ({(time.perf_counter() - t0) / 60:.1f} min)\n")
 
         # ---- final -------------------------------------------------------
-        finals = build_final_spectra(groups, paths["stage3"], paths["final"], tag)
+        finals = build_final_spectra(groups, paths["stage3"], paths["final"], tag_name)
         print_funnel(uncal_counts, sci, paths["stage2"], groups, finals,
                       args.require_slit, paths["stage3"])
         for key, path in finals.items():
@@ -884,4 +960,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_per_proposal(main)

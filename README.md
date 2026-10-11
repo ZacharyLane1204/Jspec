@@ -175,6 +175,7 @@ Every reduction pipeline writes into the same tree, below a single
 │   │   ├── asn/                  <- association files
 │   │   ├── stage2/               <- *_cal.fits
 │   │   ├── stage3/               <- *_s3d.fits, *_x1d.fits
+│   │   ├── pfpc/                 <- pfpc_cor's corrected 1-D spectra
 │   │   ├── reextract/            <- AstroBkgInterp re-extraction
 │   │   └── final/                <- the spectrum you analyse
 │   └── SN2024aecx_2025-06-01/
@@ -183,6 +184,12 @@ Every reduction pipeline writes into the same tree, below a single
     └── SN2024aecx_2025-06-01/
         └── ...
 ```
+
+`pfpc/` only appears on the MRS-PFPC route, and is created when
+`import_pfpc_products` runs — it would otherwise sit empty in every NIRSpec
+epoch. It holds `pfpc_cor`'s corrected 1-D spectra. The Level-3 *cubes* that
+`pfpc_proc` produces go to `stage3/` along with everything else's Stage-3
+output, so the path to a cube is the same whichever route you took.
 
 Three things follow from this, and they are the point of it:
 
@@ -198,25 +205,69 @@ Three things follow from this, and they are the point of it:
   *symlinked* into each epoch, so re-running does not duplicate tens of GB.
   If symlinks are unavailable the pipelines fall back to copying.
 
-`<TAG>` defaults to a sanitised version of the target name; `--tag`
-overrides it, which is how you keep two parameter choices side by side
-without overwriting each other. The date is always `YYYY-MM-DD`.
+`<TAG>` is the display name of the target and `<DATE>` is always
+`YYYY-MM-DD`. Every pipeline uses the same two, for the epoch directory
+*and* for the stem of every file inside it, so an epoch of NIRSpec and an
+epoch of MIRI for the same target and date sort next to each other and
+read the same way.
+
+By default `<TAG>` comes from the target name in the file headers. That is
+not always reliable: a proposal may spell the same target `SN 2024aecx` in
+one visit and `2024aecx` in the next, and taken literally that splits one
+target across two directory trees. The pipelines therefore group visits by
+a prefix-stripped, case-folded form of the name and then choose a single
+spelling for all of them. Pass **`--tag`** to decide it yourself:
+
+```bash
+--tag SN2024aecx      # -> SN2024aecx/NIRSpec-FS/SN2024aecx_2025-06-01/
+```
+
+`--tag` is also how you keep two parameter choices side by side —
+`--tag SN2024aecx_wide` against `--tag SN2024aecx_narrow` — without one
+overwriting the other.
+
+> **Migrating an older tree.** Runs made before this was unified produced
+> directories like `2024aecx_20250601` and `sn2024aecx_20250116`. Those are
+> invisible to `jspec products`, which looks for a trailing `YYYY-MM-DD`.
+> You do not need to re-reduce anything — rename in place:
+>
+> ```bash
+> jspec relabel SN2024aecx --tag SN2024aecx         # preview only
+> jspec relabel SN2024aecx --tag SN2024aecx --apply # do it
+> ```
+>
+> It renames directories and files, rewrites the association files to
+> match, and rebuilds `products.csv`. Without `--apply` it only prints what
+> it would do. It refuses to run if any destination name already exists.
 
 `jspec.layout` is the single source of truth for all of this — no pipeline
 builds a path by hand.
 
 ### The short version
 
+MIRI MRS, via the recommended MRS-PFPC route:
+
 ```bash
-# Reduce (one command per instrument; each handles all epochs in the proposal)
-python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 --outdir SN2024aecx --max-cores half
-python -m jspec.pipelines.abi_reextract_pfpc     --outdir SN2024aecx
+# 1-3. Download and split by epoch, reduce + fringe-correct, file the output
+python -m jspec.pipelines.prepare_mrs_pfpc_epochs --proposal 9233 --outdir SN2024aecx
+cd SN2024aecx/MIRI-MRS && pfpc_proc SN2024aecx_2025-06-01 && pfpc_cor SN2024aecx_2025-06-01 && cd ../..
+python -m jspec.pipelines.import_pfpc_products --outdir SN2024aecx
+
+# 4. Measure the source position in the cube you just made
+python -m jspec.pipelines.get_source_radec \
+    --cube SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/stage3/*_level3_ch1-short_s3d.fits
+
+# 5. Background-subtract, extract and combine, using that position
+python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx --ra 123.456789 --dec -12.345678
+
+# NIRSpec, into the same --outdir so the two can be stitched together later
+python -m jspec.pipelines.nirspec_fs_auto_pipeline --proposal 9233 --target SN2024aecx --outdir SN2024aecx
 
 # What did that produce?
 jspec products SN2024aecx
 
 # Analyse
-jspec stitch "SN2024aecx/*/*_2025-06-01/final/*.ecsv" -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
+jspec stitch "SN2024aecx/*/*/final/*.ecsv" -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
 jspec detect SN2024aecx_2025-06-01.ecsv -z 0.002665 -o features.ecsv
 jspec plot   SN2024aecx_2025-06-01.ecsv -z 0.002665 --bands --features -o spectrum.png
 jspec fit    SN2024aecx_2025-06-01.ecsv -z 0.002665 --line 12.814 --select
@@ -242,106 +293,80 @@ export CRDS_SERVER_URL=https://jwst-crds.stsci.edu
 The first pipeline run downloads several GB of reference files into
 `CRDS_PATH`. That is normal and happens once.
 
-### 3.0 Find your source position
+### A target observed under several programs
 
-**You do not need this to start.** If you give no position, the pipeline
-locates the brightest point source in each cube itself (see
-[3.1.1](#311-what-if-i-do-not-have-a-refined-ra-and-dec-yet)), which is the
-right choice for a multi-epoch proposal. Use this step only to *refine* a
-position later, or when auto-location picks the wrong object. If you already
-have a Level-3 cube:
+A supernova is often followed under more than one program — a DD program for
+the discovery epoch, a GO program for the follow-up — and every pipeline here
+that takes `--proposal` accepts a list:
 
 ```bash
-python -m jspec.pipelines.get_source_radec --cube some_s3d.fits
-python -m jspec.pipelines.get_source_radec --cube some_s3d.fits --x 24 --y 27
-```
-
-Pass the RA/Dec it prints back in with `--from-stage3`, which reuses the
-existing cubes and so takes minutes rather than hours.
-
-### 3.1 MIRI MRS
-
-There are two routes. **Route A** (this section) is the standard pipeline
-plus an AstroBkgInterp re-extraction. **Route B**
-([3.1.0](#310-route-b-mrs-pfpc)) swaps Stages 1–3 for MRS-PFPC, which
-additionally applies a point-source fringe and photometric correction. Both
-end in the same place: `abi_reextract_pfpc` writing a combined spectrum to
-each epoch's `final/`.
-
-**You do not run this once per epoch.** `miri_mrs_auto_pipeline` is
-epoch-aware: it reads the observation dates out of the *uncal* headers
-before processing anything, builds one directory per `(target, epoch)`, and
-runs Stages 1–3 separately inside each. A proposal with one target observed
-four times gives you four epoch trees:
-
-```
-4 (target, epoch) group(s) across 1 target(s) (>1.0 day gap = new epoch)
-  SN2024aecx_2025-01-17  SN2024aecx_2025-06-01
-  SN2024aecx_2025-12-07  SN2024aecx_2025-12-28
-```
-
-> Grouping happens on uncal rather than after Stage 2 so that no stage ever
-> sees two epochs at once. Grouping later would still produce correct
-> Level-3 associations, but the intermediate products would be mixed in one
-> directory and a restart could pick up the wrong ones.
-
-So the normal MRS run is one command for the whole proposal:
-
-```bash
-python -m jspec.pipelines.miri_mrs_auto_pipeline \
-    --proposal 9233 --outdir SN2024aecx \
+python -m jspec.pipelines.miri_lrs_fs_auto_pipeline \
+    --proposal 4217 6583 9105 12586 \
+    --target SN2024ahv --tag SN2024ahv --outdir SN2024ahv \
     --max-epoch-gap-days 1.0 --max-cores half
 ```
 
-`--outdir` is **required** on every auto-pipeline. There is no default,
-because a default would put a 27 GB reduction wherever you happened to be
-standing.
+`--proposal 4217,6583` works too, as does repeating the flag. The proposals
+are downloaded and reduced **one after another**, each querying MAST only for
+its own exposures, all into the same `--outdir`. Nothing special happens when
+they land there: epoch directories are keyed on observation date, not on
+program, so exposures from different programs taken on the same night group
+into one epoch, and `jspec stitch` and `products.csv` treat the result exactly
+as if it had all come from a single program.
 
-Note what is *not* in that command: no `--ra/--dec`, and no aperture or
-background options. The defaults are the recommended values, and the source
-position is found automatically — see
-[3.1.1](#311-what-if-i-do-not-have-a-refined-ra-and-dec-yet) and
-[3.1.2](#312-choosing-the-background-and-aperture-options) below.
+Give the same `--tag` for every proposal. Without it each run resolves the
+target name independently from its own headers, and one program spelling it
+`SN2024ahv` while another says `2024ahv` will silently produce two parallel
+directory trees that never stitch together.
 
-Then produce the final spectrum. One command covers every MIRI-MRS epoch in
-the tree:
+If one proposal fails — a MAST outage, a corrupt download — the traceback is
+printed and the **remaining proposals still run**. The summary at the end
+lists what succeeded, and prints the command to re-run just the ones that
+did not:
+
+```
+      4217       ok    42.1 min
+      6583   FAILED     1.3 min   RuntimeError: ...
+      9105       ok    38.7 min
+
+1 of 3 proposals did not finish. Re-run just those with:
+  python -m jspec.pipelines.miri_lrs_fs_auto_pipeline --proposal 6583 ...
+```
+
+The exit status is non-zero if anything failed, so this is safe to put in a
+script. A single `--proposal` behaves exactly as before.
+
+### 3.1 MIRI MRS
+
+There are two routes to an MRS spectrum.
+
+**Route A — MRS-PFPC ([3.1.1](#311-route-a-mrs-pfpc-recommended)) is the
+recommended one**, and is what the rest of this file assumes. It replaces
+Stages 1–3 with [MRS-PFPC](https://github.com/STScI-MIRI/MRS-PFPC), which
+applies a point-source fringe and photometric correction the standard
+pipeline does not. For a point source — a supernova, a star, an AGN
+nucleus — that correction removes a real, wavelength-dependent throughput
+error, and leaving it uncorrected puts low-amplitude ripples in exactly the
+places where you will later be trying to decide whether a broad feature is
+real.
+
+**Route B — the standard pipeline
+([3.1.3](#313-route-b-the-standard-pipeline))** runs jwst's own Stages 1–3
+end to end from one command. Use it when the target is extended, when you
+want a reference reduction to compare against, or when you do not need the
+point-source correction.
+
+Both routes finish the same way: `abi_reextract_pfpc` subtracts the
+background with AstroBkgInterp, extracts each sub-band, combines the twelve
+into one spectrum, and writes it to the epoch's `final/`.
+
+#### 3.1.1 Route A: MRS-PFPC (recommended)
+
+Five commands. MRS-PFPC is installed by `environment.yml`, so there is no
+environment switching.
 
 ```bash
-python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx
-```
-
-For each epoch this finds the Level-3 cubes, re-extracts every sub-band with
-AstroBkgInterp, combines the twelve sub-bands into one spectrum, copies it
-into `final/`, and records it in `products.csv` as the **recommended**
-product for that epoch. Narrow it with `--date 2025-06-01` or `--tag`, or
-point it at an arbitrary directory with `--level3-dir` + `--product-name`.
-
-The result:
-
-```
-SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/
-├── reextract/   SN2024aecx_2025-06-01_ch1-short_x1d.fits  (×12)
-│                SN2024aecx_2025-06-01_abi_combined.ecsv
-└── final/       SN2024aecx_2025-06-01_abi_combined.ecsv   <- use this one
-```
-
-To narrow a run rather than process everything, use `--dataset` (specific
-observations) or `--tag` (changes the directory name, so parallel runs with
-different settings do not overwrite each other). Restart options
-(`--skip-download`, `--from-stage3`, `--redo`) are in
-[3.7](#37-restarting-without-redoing-everything).
-
-#### 3.1.0 Route B: MRS-PFPC
-
-[MRS-PFPC](https://github.com/STScI-MIRI/MRS-PFPC) applies a point-source
-fringe and photometric correction that the standard pipeline does not. Use
-it *instead of* Route A's Stages 1–3, not in addition.
-
-It is installed by `environment.yml`, so there is no environment switching
-any more. The chain is four commands:
-
-```bash
-# 1. Download and lay out one directory per epoch.
+# 1. Download, and lay out one directory per epoch.
 python -m jspec.pipelines.prepare_mrs_pfpc_epochs \
     --proposal 9233 --outdir SN2024aecx --max-gap-days 1.0
 
@@ -353,18 +378,72 @@ cd ../..
 # 3. Sort PFPC's flat output dump into the standard layout.
 python -m jspec.pipelines.import_pfpc_products --outdir SN2024aecx
 
-# 4. Re-extract and combine, exactly as in Route A.
-python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx
+# 4. NOW find the source position, from the cube you just made.
+python -m jspec.pipelines.get_source_radec \
+    --cube SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/stage3/*_level3_ch1-short_s3d.fits
+
+# 5. Re-extract and combine, using that one fixed sky position.
+python -m jspec.pipelines.abi_reextract_pfpc \
+    --outdir SN2024aecx --ra 123.456789 --dec -12.345678
 ```
 
 Step 1 prints the exact step-2 commands for the epochs it found, so you do
-not have to type the directory names.
+not have to type the directory names. Step 4 prints an RA/Dec to paste into
+step 5.
+
+**Step 5 processes every epoch it finds.** With one `--ra/--dec` that one
+position is used for all of them, which is what you want for a fixed target
+measured once. If you measured a position per epoch, either narrow the run
+with `--date`, or give them all at once with `--positions` — see
+[When each epoch needs its own position](#when-each-epoch-needs-its-own-position).
+
+**Why step 4 sits here and not at the start.** You cannot measure a source
+position before you have a cube to measure it in. Archive coordinates are
+often good to an arcsecond at best, the header target position is the
+*requested* pointing rather than where the source landed, and MRS dithers
+move the source around the field. So the order is: make the cubes first,
+centroid in the cube, then use that position for the extraction. See
+[3.1.2](#312-finding-the-source-position) for what to do when step 4
+disagrees with what you expected, or when you skip it entirely.
+
+**Why pass `--ra/--dec` at all, rather than letting each band centroid
+itself.** `abi_reextract_pfpc` will auto-centroid per band if you give it
+nothing, and for a bright source that is fine. It fails at the red end.
+Channel 4 has the smallest field of view, the worst S/N, and a thermal
+background that dominates the slice; photutils detection there will
+occasionally miss the target and lock onto a brighter neighbour instead,
+with no error — you get a clean-looking ch4 spectrum of the wrong object,
+which then drags the whole stitched red end with it. Measuring once in
+ch1-short, where the field is largest and the source is brightest, and
+resolving that *sky* position through each cube's own WCS, removes the
+failure mode entirely. Different pixel scales and `ifualign` grids are
+handled by the WCS, so this is a drop-in replacement for per-band
+centroiding rather than a workaround.
+
+One RA/Dec covers every epoch of a fixed target, which is why step 5 needs
+no `--date`. The run prints a reminder when it applies one position to
+several epochs; narrow with `--date 2025-06-01` if an epoch genuinely needs
+a different one.
+
+The result, per epoch:
+
+```
+SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/
+├── stage3/      SN2024aecx_2025-06-01_level3_ch1-short_s3d.fits (×12)  <- cubes
+│                SN2024aecx_2025-06-01_level3_ch1-short_x1d.fits (×12)  uncorrected
+├── pfpc/        SN2024aecx_2025-06-01_pfpc_ch1-short_x1d.fits   (×12)  PFPC-corrected 1-D
+│                SN2024aecx_2025-06-01_pfpc_sn.fits
+├── reextract/   SN2024aecx_2025-06-01_ch1-short_abi_x1d.fits    (×12)
+│                SN2024aecx_2025-06-01_abi_combined.ecsv
+└── final/       SN2024aecx_2025-06-01_abi_combined.ecsv   <- use this one
+```
 
 **Why step 3 exists.** MRS-PFPC writes everything — uncal, rate, cal, s3d,
 x1d, corrected x1d — into one flat directory alongside the inputs, with no
 stage subdirectories. `import_pfpc_products` moves each file into the right
-place (`stage1/`, `stage2/`, `stage3/`, and the corrected spectra into
-`pfpc/`), removes the flat uncal duplicates once it has confirmed they are
+place — the Level-3 cubes and uncorrected x1d into `stage3/`, `pfpc_cor`'s
+corrected spectra into `pfpc/`, and the rest into `stage1/`, `stage2/`,
+`asn/` and `uncal/` — removes the flat uncal duplicates once it has confirmed they are
 also in `uncal/`, and records what it found. Use `--dry-run` to see the plan
 without moving anything. Re-running it is harmless.
 
@@ -390,31 +469,49 @@ Three things about `pfpc_proc` that are easy to get wrong:
   Detector1 from scratch unless you pass `--det1skip`.
 
 `pfpc_cor` writes `<dirname>_pfpc_ch<N>-<band>_x1d.fits` — twelve files, one
-per sub-band. **Those are the spectra to use**, not the `_level3_` ones,
-which are uncorrected; `import_pfpc_products` files them under `pfpc/` and
-`abi_reextract_pfpc` prefers that directory automatically. Useful flags:
-`--dithsub` (pair dither subtraction, and it must be passed to *both*
-`pfpc_proc` and `pfpc_cor`), `--png`/`--pdf` for the diagnostic plot,
-`--chan N` to inspect one channel.
+per sub-band. **Those are PFPC's own corrected spectra**, not the `_level3_`
+ones, which are uncorrected. `abi_reextract_pfpc` does not use either
+directly: it goes back to the *cubes* so that it can subtract the background
+before extraction, and names its output `_abi_x1d.fits` specifically so that
+a later `pfpc_cor` run cannot pick them up and silently mix the two
+extractions. Useful `pfpc_proc`/`pfpc_cor` flags: `--dithsub` (pair dither
+subtraction, and it must be passed to *both*), `--png`/`--pdf` for the
+diagnostic plot, `--chan N` to inspect one channel.
+
+> **What PFPC does not do.** It corrects a point-source flux-calibration and
+> fringe pattern. It does not remove host galaxy or extended background
+> light — that is what step 5's AstroBkgInterp pass is for. The two are
+> solving different problems, which is why both are in the chain.
 
 Because each epoch is a separate directory, epochs cannot mix — which is the
 whole point of step 1. `pfpc_proc` has no epoch awareness of its own; it
 globs every `jw*mirifu*uncal.fits` it finds and puts them all in one Level-3
 association.
 
-After step 4 you rejoin the normal flow at
+After step 5 you rejoin the normal flow at
 [section 5 (stitching)](#5-stitch-the-segments-into-one-spectrum).
 
-#### 3.1.1 What if I do not have a refined RA and Dec yet?
+#### 3.1.2 Finding the source position
 
-**Then do not pass one.** If you omit `--ra/--dec` and `--src-x/--src-y`,
-the pipeline calls `locate_source_pixel()` on each cube, which runs
-DAOStarFinder on the median-collapsed cube and takes the brightest point
-source. This is AstroBkgInterp's own recommended approach, and it gives
-AstroBkgInterp what it actually wants — pixel coordinates — rather than
-RA/Dec that then have to be run through the WCS.
+This is step 4 above, and it only makes sense once a cube exists.
 
-It reports what it found, per cube, so you can check it:
+```bash
+# Auto-centroid a cube and report its sky position.
+python -m jspec.pipelines.get_source_radec --cube ..._ch1-short_s3d.fits
+
+# Or convert a pixel position you already trust.
+python -m jspec.pipelines.get_source_radec --cube ..._ch1-short_s3d.fits --x 24 --y 27
+```
+
+Use **ch1-short**: largest field of view, best S/N, and the band where a
+source that has become faint by ch4-long is still obvious.
+
+**You can skip it.** Omit `--ra/--dec` and each band is centroided
+independently with `locate_source_pixel()`, which runs DAOStarFinder on the
+median-collapsed cube and takes the brightest point source. That is
+AstroBkgInterp's own recommended approach and it gives AstroBkgInterp what
+it actually wants — pixel coordinates — without a WCS round trip. It reports
+what it found, per cube, so you can check it:
 
 ```
 SN2024AECX_2025-06-01: source at (x=24.31, y=27.08)
@@ -422,11 +519,136 @@ SN2024AECX_2025-06-01: source at (x=24.31, y=27.08)
 
 If it finds nothing it warns and skips that cube rather than guessing.
 
-**For a multi-epoch proposal, omitting the position is actively the better
-choice.** An explicit `--ra/--dec` is a single global value applied to every
-(target, epoch) group in the run, which is wrong as soon as there is more
-than one group — different visits have different pointings and dithers. The
-pipeline warns about exactly this:
+For a bright, isolated target that is perfectly adequate. Pass an explicit
+position when any of the following apply, which for a fading supernova in a
+host galaxy is most of the time:
+
+- the field is crowded, or there is a brighter neighbour within a few
+  arcseconds;
+- the source is faint by ch4 — see the ch4 failure mode described in
+  [3.1.1](#311-route-a-mrs-pfpc-recommended);
+- the band-to-band overlap factors printed by the combine step jump around
+  rather than drifting smoothly, which usually means one band centroided
+  somewhere different from the rest;
+- you want two reductions to be comparable, which requires them to have
+  extracted from the same place.
+
+For sub-pixel work, `find_source_centroid()` and `refine_and_reprocess()`
+do a weighted cube collapse followed by SExtractor-style detection, which is
+more accurate than either the header position or eyeballing an image.
+
+##### When each epoch needs its own position
+
+`--outdir` on its own re-extracts **every** MIRI MRS epoch under it, and a
+single `--ra/--dec` is applied to all of them. That is right for a fixed
+target measured once, but not if you have re-measured the position per epoch
+(or the target moves). You have two ways to scope it.
+
+**One epoch at a time** — `--date` (or `--tag`) restricts the run:
+
+```bash
+python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx \
+    --date 2025-01-17 --ra 166.456476 --dec -0.034829
+```
+
+**All epochs in one run** — `--positions` gives each its own position:
+
+```bash
+python -m jspec.pipelines.abi_reextract_pfpc --outdir SN2024aecx \
+    --positions positions.csv
+```
+
+with `positions.csv`:
+
+```csv
+date,ra,dec
+2025-01-17,166.456476,-0.034829
+2025-06-01,166.456445,-0.034846
+2025-12-07,166.456158,-0.034929
+2025-12-28,166.456167,-0.034921
+```
+
+Prefer this for more than one or two epochs. Four separate commands with
+coordinates retyped each time is how a digit gets transposed, or how an
+epoch gets re-run with the previous one's position still in the shell
+history — and neither mistake produces an error, just a slightly wrong
+spectrum.
+
+JSON works too, inline or as a file, and keys may be a date or a full epoch
+stem:
+
+```bash
+--positions '{"2025-01-17": [166.456476, -0.034829],
+              "SN2024aecx_2025-06-01": {"ra": 166.456445, "dec": -0.034846}}'
+```
+
+The file does not have to be complete. Epochs it does not name fall back to
+`--ra/--dec`, or to per-band auto-centroiding if you gave neither, so you can
+pin only the epochs that need it. Keys matching no epoch are reported rather
+than ignored:
+
+```
+  NOTE: --positions keys matching no epoch found here: ['2099-01-01']
+```
+
+Each epoch prints the position it actually used, so the log says which is
+which:
+
+```
+=== SN2024aecx_2025-01-17: cubes in MIRI-MRS/SN2024aecx_2025-01-17/stage3  [RA=166.456476 Dec=-0.034829 (from --positions)]
+```
+
+`--positions` is for epochs discovered under `--outdir`; with `--level3-dir`
+there is only one directory, so use `--ra/--dec`.
+
+#### 3.1.3 Route B: the standard pipeline
+
+`miri_mrs_auto_pipeline` runs jwst's Stages 1–3 and then the same
+AstroBkgInterp re-extraction, without the PFPC correction.
+
+**You do not run it once per epoch.** It reads the observation dates out of
+the *uncal* headers before processing anything, builds one directory per
+`(target, epoch)`, and runs Stages 1–3 separately inside each. A proposal
+with one target observed four times gives you four epoch trees:
+
+```
+4 (target, epoch) group(s) across 1 target(s) (>1.0 day gap = new epoch)
+  SN2024aecx_2025-01-17  SN2024aecx_2025-06-01
+  SN2024aecx_2025-12-07  SN2024aecx_2025-12-28
+```
+
+> Grouping happens on uncal rather than after Stage 2 so that no stage ever
+> sees two epochs at once. Grouping later would still produce correct
+> Level-3 associations, but the intermediate products would be mixed in one
+> directory and a restart could pick up the wrong ones.
+
+So the whole proposal is two commands:
+
+```bash
+python -m jspec.pipelines.miri_mrs_auto_pipeline \
+    --proposal 9233 --outdir SN2024aecx \
+    --max-epoch-gap-days 1.0 --max-cores half
+
+python -m jspec.pipelines.get_source_radec \
+    --cube SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/stage3/*_ch1-short_s3d.fits
+
+python -m jspec.pipelines.abi_reextract_pfpc \
+    --outdir SN2024aecx --ra 123.456789 --dec -12.345678
+```
+
+`--outdir` is **required** on every auto-pipeline. There is no default,
+because a default would put a 27 GB reduction wherever you happened to be
+standing.
+
+Note what is *not* in the first command: no `--ra/--dec`, and no aperture or
+background options. Stages 1–3 do not need a source position — only the
+extraction does, which is why it is supplied at the last step. The
+background defaults are the recommended values; see
+[3.1.4](#314-choosing-the-background-and-aperture-options).
+
+`miri_mrs_auto_pipeline` does accept `--ra/--dec` for its own built-in
+extraction, but a single value is then applied to *every* `(target, epoch)`
+group in the run, and it warns about exactly that:
 
 ```
 NOTE: an explicit source position was given but there is more than one
@@ -434,34 +656,19 @@ NOTE: an explicit source position was given but there is more than one
 all of them, which is probably not what you want.
 ```
 
-Auto-location, by contrast, is done per cube.
+Prefer the three-command form above: it keeps position-finding separate from
+reduction, so refining the position costs one short re-extraction instead of
+a full re-reduction.
 
-Give an explicit position only when auto-location fails or picks the wrong
-object — a crowded field, a faint target next to a bright neighbour, or a
-source too faint to be detected in the collapsed cube. In that case narrow
-the run to one epoch first (`--dataset` or `--tag`), then pass the position
-for that epoch.
+To narrow a run rather than process everything, use `--dataset` (specific
+observations) or `--tag` (changes the directory name, so parallel runs with
+different settings do not overwrite each other). Restart options
+(`--skip-download`, `--from-stage3`, `--redo`) are in
+[3.7](#37-restarting-without-redoing-everything). `--from-stage3` reuses the
+existing cubes, so re-running the tail of Route B is minutes rather than
+hours.
 
-The refinement path, once you have a first cube:
-
-```bash
-# Get RA/Dec (or pixel coords) from an existing cube.
-python -m jspec.pipelines.get_source_radec \
-    --cube SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/stage3/*_ch1-short_s3d.fits
-
-# Re-run only the post-Stage-3 part with the refined position.
-python -m jspec.pipelines.miri_mrs_auto_pipeline --proposal 9233 \
-    --outdir SN2024aecx --from-stage3 --dataset <one-obs> \
-    --ra 123.456 --dec -12.345
-```
-
-`--from-stage3` reuses the existing cubes, so this is minutes rather than
-hours. For sub-pixel work, `find_source_centroid()` and
-`refine_and_reprocess()` do a weighted cube collapse followed by
-SExtractor-style detection, which is more accurate than either the header
-position or eyeballing an image.
-
-#### 3.1.2 Choosing the background and aperture options
+#### 3.1.4 Choosing the background and aperture options
 
 Short version: **the defaults are the recommended values.** The long option
 string in older notes is unnecessary, and one of those options does nothing
@@ -533,7 +740,7 @@ background structure but is noisier. 9 px is a reasonable middle for MRS.
 > `--channel-overrides` on `abi_reextract_pfpc`) restores the broken
 > behaviour and exists only for reproducing old runs. Do not use it.
 
-#### 3.1.3 Turning down the log output
+#### 3.1.5 Turning down the log output
 
 By default the console shows only this pipeline's own progress output and
 tqdm bars; jwst, stpipe, stcal and CRDS are held to WARNING. `--verbose`
@@ -610,9 +817,10 @@ python -m jspec.pipelines.nirspec_fs_auto_pipeline \
 python -m jspec.pipelines.nirspec_fs_refining --help
 ```
 
-Use the **same `--outdir`** as the MRS run. The results land in
-`SN2024aecx/NIRSpec-FS/<TAG>_<DATE>/` beside the MIRI ones, which is what
-lets `jspec stitch` solve a single 1.7–28 µm spectrum per epoch later.
+Use the **same `--outdir`** and the **same `--tag`** as the MRS run. The
+results land in `SN2024aecx/NIRSpec-FS/<TAG>_<DATE>/` beside the MIRI ones,
+which is what lets `jspec stitch` solve a single 1.7–28 µm spectrum per
+epoch later.
 
 `--plan-only` writes `epoch_plan.txt` into `--outdir` and exits before
 downloading anything, so it is cheap to run first and worth doing.
@@ -650,6 +858,25 @@ python -m jspec.pipelines.miri_lrs_fs_auto_pipeline \
 
 Dedicated background exposures, where the programme took them, are grouped
 into the same epoch as the science and used for that epoch only.
+
+Only `P750L` exposures are downloaded. A MIRI/SLIT observation also owns the
+visit's target-acquisition images — taken through an imaging filter on the
+same detector, with the same `jw*_mirimage_uncal.fits` filename — and those
+are not LRS spectra. `--all-exp-types` downloads them anyway if you want them
+for diagnostics. The same applies to NIRSpec fixed slit, where acquisition
+exposures are taken with the grating wheel in `MIRROR`.
+
+Use `--list-mast` to see exactly what will be fetched before committing to
+the download:
+
+```bash
+python -m jspec.pipelines.miri_lrs_fs_auto_pipeline \
+    --proposal 4217 --outdir SN2024ahv --list-mast
+```
+
+As everywhere else, `--proposal` takes a list if the target was observed
+under more than one program — see
+[A target observed under several programs](#a-target-observed-under-several-programs).
 
 ### 3.5 What did all that produce?
 
@@ -740,6 +967,76 @@ Because epoch directories are self-contained, a restart picks up exactly the
 products belonging to that epoch and cannot accidentally reuse another
 visit's intermediates.
 
+### 3.8 Checking your downloads
+
+A download that is interrupted partway through a file is the one failure
+that will not announce itself. The primary header of a FITS file sits in its
+first few kB, so a file that stopped at 3% still opens, still has the right
+name, and still passes any casual check. What is missing is every extension
+after it — including the ASDF extension that JWST datamodels read their
+metadata from.
+
+The JWST pipeline then fails like this, typically well into a run:
+
+```
+  File ".../stdatamodels/jwst/datamodels/util.py", line 511, in read_metadata
+    bs = io.BytesIO(hdulist["ASDF"].data.tobytes())
+KeyError: "Extension 'ASDF' not found."
+```
+
+preceded, many lines earlier and easy to scroll past, by the real error:
+
+```
+AstropyUserWarning: File may have been truncated: actual file length
+(7208960) is smaller than the expected size (253647360)
+```
+
+To find that in seconds rather than hours, check before you run:
+
+```bash
+jspec verify SN2024aecx
+# or equivalently
+python -m jspec.pipelines.verify_uncal SN2024aecx
+```
+
+It walks the tree, resolves symlinks so each real file is reported once,
+reads headers only (a few hundred files take a second), and exits non-zero
+if anything is incomplete — so it can gate a long run:
+
+```bash
+jspec verify SN2024aecx && cd SN2024aecx/MIRI-MRS && pfpc_proc <epoch>
+```
+
+To clear out the bad files so they get fetched again:
+
+```bash
+python -m jspec.pipelines.verify_uncal SN2024aecx --delete
+```
+
+`--delete` removes the real file *and* the symlinks in the epoch
+directories that point at it, then prints the re-download command. Re-running
+`prepare_mrs_pfpc_epochs --proposal <id> --outdir <outdir>` fetches only what
+is missing: complete files are verified and kept, not downloaded again.
+
+You rarely need to do this by hand. Since this check is now applied to files
+already on disk, **re-running the download step is itself the repair**: an
+incomplete file is detected, reported, and re-fetched automatically.
+
+```bash
+# finds and replaces anything incomplete, keeps everything good
+python -m jspec.pipelines.prepare_mrs_pfpc_epochs --proposal 9233 --outdir SN2024aecx
+
+# distrust every local copy and fetch the lot again (rarely needed)
+python -m jspec.pipelines.prepare_mrs_pfpc_epochs --proposal 9233 --outdir SN2024aecx \
+    --force-download
+```
+
+To check calibrated products rather than just raw files, pass a pattern:
+
+```bash
+jspec verify SN2024aecx --pattern '*.fits'
+```
+
 ---
 
 ## 4. Keep your epochs apart
@@ -821,9 +1118,33 @@ mean it.
 ## 5. Stitch the segments into one spectrum
 
 ```bash
-jspec stitch "SN2024aecx/*/*/final/*.ecsv" \
-    -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
+jspec stitch SN2024aecx -z 0.002665 -o SN2024aecx.ecsv --plot stitch.png
 ```
+
+Point it at the output directory and it works out what to stitch by
+reading `products.csv`: the recommended product for each instrument and
+epoch, which is the question you were going to have to answer by hand
+anyway. An epoch directory also holds Stage-3 cubes, per-channel spectra
+and PFPC output, and stitching those together as well would be
+meaningless, so a bare glob is the wrong tool here.
+
+If the index is stale or missing — or if you renamed anything — rebuild it
+first, and check that every instrument you expect is listed:
+
+```bash
+jspec products SN2024aecx --rebuild --recommended
+```
+
+```
+* MIRI-MRS    SN2024aecx_2025-06-01  abi_combined   4.900-28.627 um
+* NIRSpec-FS  SN2024aecx_2025-06-01  s400a1_final   1.699- 5.201 um
+```
+
+If NIRSpec is missing from that list, its directories predate the unified
+naming; see `jspec relabel` in [section 2](#where-everything-lands).
+
+You can still pass explicit files or a glob if you want to override the
+choice (`jspec stitch a.ecsv b.ecsv ...`).
 
 This writes **one file per epoch** — `SN2024aecx_2025-06-01.ecsv`,
 `SN2024aecx_2025-12-07.ecsv`, … — each independently scale-solved, with the
@@ -834,13 +1155,16 @@ global fit, which is what removes the NIRSpec↔MRS jump.
 In Python:
 
 ```python
-from jspec.spectrum import read_segments
+from jspec.epochs import group_segments_by_epoch
 from jspec.stitch import stitch
 
-segs = read_segments("SN2024aecx/*/*/final/*.ecsv", redshift=0.002665)
-report = stitch(segs)
-print(report.summary())
-report.spectrum.write("SN2024aecx_2025-06-01.ecsv")
+for ep in group_segments_by_epoch("SN2024aecx", redshift=0.002665):
+    report = stitch(ep.segments)
+    print(report.summary())
+    # Blank segments are already dropped; this just records it.
+    if report.dropped:
+        print("dropped:", ", ".join(report.dropped))
+    report.spectrum.write(f"SN2024aecx_{ep.label}.ecsv")
 ```
 
 ### Read the report, every time
@@ -908,6 +1232,117 @@ it is measurable, the uncertainty inflated by `1 + gap/baseline`, and
 curvature rejected at 2.5σ. Extrapolating across a gap is a weak measurement
 and is reported as one.
 
+### Is this segment even on target?
+
+Before any matching happens, each segment is checked *on its own* for a
+detected source. This exists because it is the one failure the matching
+machinery cannot catch: the solve is just as happy to scale background
+noise onto a real continuum as it is to scale one real spectrum onto
+another, and the result looks entirely plausible.
+
+Three things are asked. Is the segment **flat** — a constant fitted to ~20
+equal-count bins, which a real spectrum rejects with a huge χ² because it
+has a continuum slope and lines? And is it **blank** — median per-pixel
+S/N, the significance of the weighted mean flux, and the fraction of
+points above zero? A segment is flagged only if it is *both*, because
+either alone has a false-positive mode: a bright segment can still be the
+wrong thing, and a short featureless stretch of a real spectrum can look
+flat.
+
+Separately, and regardless of flatness, is the flux **negative** over most
+of the segment? That one needs no corroboration — a source cannot have a
+negative continuum — and the flatness test cannot see it, because an
+over-subtracted spectrum keeps the structure of whatever was subtracted
+and so rejects a constant easily.
+
+It appears in the report as a per-segment table:
+
+```
+segment                               med S/N  chi2/dof    +ve   verdict
+SN2024aecx_2025-01-16_s200a1_final      -0.38       1.8    33%   NO SOURCE DETECTED
+SN2024aecx_2025-01-17_abi_combined     114.06 2258776.2    96%   ok
+SN2024aecx_2025-12-27_s400a1_final      -3.75    5910.3    24%   NEGATIVE FLUX
+SN2024aecx_2025-12-28_abi_combined      15.07  101435.0    96%   ok
+```
+
+Both of those are real, and they are different problems.
+
+The January NIRSpec exposure **missed the slit**. A median S/N of −0.38
+over two thousand pixels, with two thirds of the points *below* zero and
+no structure at all, is not a faint detection — it is background. The MIRI
+segment beside it sits at +114. Stitched naively, the blue half of that
+spectrum is noise multiplied up to look like data. Drop it.
+
+The December NIRSpec exposure **was** on target, and the near-flat blue
+end is not surprising for a faint late-time source. What is flagged is
+narrower than that: it sits at a small *negative* pedestal, roughly
+constant from 1.7 to 4.0 µm and only turning positive beyond 4.6 µm. The
+report says how big that pedestal is relative to its neighbour — here
+about 3% — which is what tells you this is a mild over-subtraction on a
+real segment rather than a failed extraction. Worth knowing because the
+scale factor is fitted in the overlap, where the flux *is* positive, so
+the join looks clean while everything blueward of it sits below zero.
+Absolute fluxes and equivalent widths there are not trustworthy; the
+shape may still be.
+
+**The two verdicts are treated differently, on purpose:**
+
+- **`NO SOURCE DETECTED` segments are dropped from the output.** A
+  warning is not enough — the file still gets written, still looks like a
+  spectrum, and is what ends up in a plot three weeks later. The segment
+  is never dropped if it is the only detected one. Use `--keep-flagged`
+  to stitch it anyway.
+- **`NEGATIVE FLUX` segments are kept**, because the shape is often still
+  usable and only you can judge whether the pedestal matters for what you
+  are measuring.
+
+What happened is recorded in the output file —
+`meta["DROPPED_SEGMENTS"]`, `meta["BLANK_SEGMENTS"]`,
+`meta["NEGATIVE_SEGMENTS"]` — and `--strict` exits non-zero when anything
+is flagged. To drop a segment by hand:
+
+```bash
+jspec stitch SN2024aecx -z 0.002665 --exclude '*2025-12-27*' -o SN2024aecx.ecsv
+```
+
+`--exclude` is matched as a glob against the segment name, or as a
+substring, and is repeatable. Pass `assess_quality=False` to `stitch()` to
+switch the check off entirely.
+
+### Matching NIRSpec to MIRI across 5 µm
+
+The NIRSpec–MIRI join is the one worth understanding, because the two
+MIRI products disagree with each other more than either disagrees with
+NIRSpec. Measured on SN 2024aecx over the 4.9–5.2 µm overlap:
+
+| ratio | value | tilt |
+|---|---|---|
+| ABI re-extraction / NIRSpec FS | 0.968 | none significant |
+| PFPC ch1-short / NIRSpec FS | 1.026 | none significant |
+
+NIRSpec sits almost exactly halfway between them. The MIRI-to-MIRI spread
+is ~6%; MIRI-to-NIRSpec is ~3%, which is **below the absolute flux
+calibration accuracy of either instrument** (MRS ~5–10%; NIRSpec FS point
+source ~2–5%, plus slit losses from any mis-centring). The direction makes
+sense: AstroBkgInterp's background annulus catches some PSF wing, so it
+subtracts slightly too much, while PFPC retains a little host flux.
+
+**Do not try to close that gap with `--aper-rad` / `--ann-width`.** Both
+ratios above are *flat* — a single number describes each mismatch
+completely, with no shape error to chase. Changing the aperture changes how
+much of the PSF is captured *as a function of wavelength*, so you would
+trade a clean 3% offset for a tilt, which is strictly worse and much harder
+to undo later.
+
+Keep whichever extraction is better for the science — ABI, if you care
+about narrow host lines — and let the stitch apply the scale. The solve is
+built to do exactly this, and the factors it applied are recorded in
+`meta["SCALES"]` so the correction is never silent:
+
+```
+SCALES = SN2024aecx_2025-06-01_s400a1_final=1.00000,SN2024aecx_2025-06-01_abi_combined=1.03327
+```
+
 ### Useful options
 
 ```bash
@@ -915,6 +1350,9 @@ and is reported as one.
 --trim 0.02           # edge fraction excluded from ratio measurement
 --no-blend            # concatenate instead of tapered-blending (diagnostic)
 --max-scale 2.0       # reject ratios implying a larger correction than this
+--exclude PATTERN     # leave a segment out (glob or substring, repeatable)
+--keep-flagged        # stitch no-source segments instead of dropping them
+--strict              # exit non-zero if any join or segment is flagged
 --plot stitch.png     # per-join diagnostic figure — look at this
 ```
 
@@ -1310,8 +1748,10 @@ drops below ~5.
 | `jspec.manifest` | `products.csv` — what was produced, and which file to analyse |
 | `jspec.columns` | Canonical uppercase column names; `spectrum_table()` |
 | `jspec.pipelines` | Stage 1/2/3 reduction drivers |
+| `jspec.pipelines.mast_uncal_download` | MAST download with verification and retry |
+| `jspec.pipelines.verify_uncal` | Truncation/corruption check (`jspec verify`) |
 
-The bottom three exist so that the reduction scripts agree with each other.
+`jspec.layout`, `jspec.manifest` and `jspec.columns` exist so that the reduction scripts agree with each other.
 Before them, each pipeline invented its own directory names, its own product
 names and its own column capitalisation, and reconciling the output was
 manual work. If you are adding a pipeline, build paths with
@@ -1423,6 +1863,17 @@ anything redward of ~24 µm.
 
 ## Troubleshooting
 
+**`KeyError: "Extension 'ASDF' not found."`** — a truncated download, not a
+pipeline bug. Scroll up and you will find an `AstropyUserWarning: File may
+have been truncated`. Run `jspec verify <outdir>` to find which file, then
+`python -m jspec.pipelines.verify_uncal <outdir> --delete` and re-run the
+download step, which refetches only what is missing. See
+[3.8 Checking your downloads](#38-checking-your-downloads).
+
+**A download step says it is re-downloading a file you already have** — it
+checked the file rather than just counting it, and the file was incomplete.
+This is the self-repair working; let it run.
+
 **`No module named jspec`** — you did not `pip install -e .`, or you are in a
 different environment. The repository root *is* the package, so a bare
 `import jspec` only works after installing.
@@ -1480,6 +1931,31 @@ several GB of reference files.
 **Stage 1 is crawling on one core** — you ran a pipeline script without an
 `if __name__ == "__main__":` guard. See the caveat in
 [step 3.1](#31-miri-mrs).
+
+**`<segment> contains no detected source`** — that segment is consistent
+with flat noise while its neighbours are clearly detected, so the exposure
+most likely missed the target: a mis-centred fixed slit, or a re-extraction
+at the wrong RA/Dec. Do not stitch it; the solve will scale noise onto a
+real continuum and the result will look convincing. Check the Stage-3 cube
+or 2-D rectified product for that visit, re-extract at the right position,
+or drop the segment.
+
+**`<segment> sits below zero over most of its span`** — a small
+over-subtraction pedestal. The report gives its size as a fraction of the
+neighbouring segment: a few percent on a faint segment is a mild
+background error and the shape is probably still usable; a large fraction
+means the extraction is wrong. The segment is kept either way. Treat
+absolute fluxes and equivalent widths in that range as unreliable.
+
+**One epoch's NIRSpec and MIRI disagree by a few percent** — expected, and
+smaller than either instrument's absolute calibration accuracy. Let the
+stitch scale it rather than retuning the extraction apertures; see
+[step 5](#matching-nirspec-to-miri-across-5-m).
+
+**`jspec products` shows nothing for NIRSpec or MIRI LRS** — your epoch
+directories predate the unified naming and lack a trailing `YYYY-MM-DD`.
+Rename them with `jspec relabel <outdir> --tag <TAG> --apply`; no
+re-reduction is needed.
 
 **A join is flagged `residual calibration step`** — look at
 `jspec stitch --plot`, try a different `--anchor`, and treat any feature you

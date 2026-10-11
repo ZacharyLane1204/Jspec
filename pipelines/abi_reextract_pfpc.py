@@ -73,7 +73,9 @@ Usage
         --skip-abi-channels 4
 """
 import argparse
+import csv
 import glob
+import io
 import json
 import os
 import re
@@ -246,8 +248,14 @@ def process_cube(cube_file, out_dir, product_name, ra=None, dec=None,
 
 
 #: Where per-channel Level-3 cubes may live inside an epoch directory,
-#: in the order they are preferred. "pfpc" wins because a PFPC-corrected
-#: cube is a better starting point than the plain Stage-3 one.
+#: in the order they are preferred.
+#:
+#: In practice MRS-PFPC's cubes land in "stage3" like everything else's
+#: Stage-3 output -- import_pfpc_products routes "*_level3_*_s3d.fits"
+#: there, and reserves "pfpc" for pfpc_cor's corrected *1-D* spectra, which
+#: are not cubes. "pfpc" is kept first here only so that a hand-assembled
+#: directory of cubes placed there is still found; do not read it as
+#: "PFPC cubes go in pfpc/".
 _CUBE_SUBDIRS = ("pfpc", "stage3")
 
 
@@ -314,6 +322,101 @@ def process_level3_dir_with_abi(level3_dir, out_dir, product_name, ra=None, dec=
     return out_base, x1d_files, scale_log
 
 
+def load_positions(spec):
+    """Parse --positions into {key: (ra, dec)}.
+
+    Accepts inline JSON, a path to a JSON file, or a path to a CSV with
+    date/ra/dec columns. Keys may be an epoch date ("2025-01-17") or a full
+    epoch stem ("SN2024aecx_2025-01-17"); both are kept so either matches.
+
+    This exists because a moving or re-measured target genuinely has a
+    different position per epoch, and the alternative -- one run per epoch
+    with the RA/Dec retyped on the command line -- is exactly the kind of
+    thing that silently gets a digit wrong, or gets run with the previous
+    epoch's position still in the shell history.
+    """
+    # Decide path-or-inline on what the argument *looks like*, not on
+    # whether the file happens to exist. Keying off os.path.isfile means a
+    # mistyped or not-yet-created filename silently falls through to the
+    # JSON branch, and the user gets "Expecting value: line 1 column 1"
+    # pointing at the JSON decoder -- which says nothing about the real
+    # problem. Inline JSON always starts with { or [, so anything else is
+    # a path, and a missing path can be reported as a missing path.
+    looks_like_json = spec.lstrip().startswith(("{", "["))
+    if not looks_like_json:
+        if not os.path.isfile(spec):
+            raise SystemExit(
+                f"--positions: no such file {spec!r}.\n\n"
+                f"Create it with one row per epoch, for example:\n\n"
+                f"  date,ra,dec\n"
+                f"  2025-01-17,166.456476,-0.034829\n"
+                f"  2025-06-01,166.456445,-0.034846\n\n"
+                f"Dates must match the epoch directory dates "
+                f"(<outdir>/MIRI-MRS/<tag>_<date>/); `jspec products <outdir>` "
+                f"or `ls <outdir>/MIRI-MRS` lists them.\n"
+                f"Inline JSON is also accepted, e.g. "
+                f"--positions '{{\"2025-01-17\": [166.456476, -0.034829]}}'.")
+        with open(spec) as f:
+            head = f.read()
+        if head.lstrip().startswith(("{", "[")):
+            try:
+                raw = json.loads(head)                  # .json, or JSON in any file
+            except json.JSONDecodeError as exc:
+                raise SystemExit(f"--positions: {spec} is not valid JSON: {exc}")
+        else:
+            raw = {}
+            reader = csv.DictReader(io.StringIO(head))
+            for row in reader:
+                row = {(k or "").strip().lower().lstrip("\ufeff"): v
+                       for k, v in row.items()}
+                key = row.get("date") or row.get("epoch") or row.get("stem")
+                if not key:
+                    raise SystemExit(
+                        f"{spec}: need a 'date' (or 'epoch'/'stem') column "
+                        f"alongside 'ra' and 'dec'; found {sorted(row)}")
+                if "ra" not in row or "dec" not in row:
+                    raise SystemExit(
+                        f"{spec}: need 'ra' and 'dec' columns; found {sorted(row)}")
+                raw[key.strip()] = [row["ra"], row["dec"]]
+            if not raw:
+                raise SystemExit(f"{spec}: no rows found. Expected a header line "
+                                 f"'date,ra,dec' followed by one row per epoch.")
+    else:
+        try:
+            raw = json.loads(spec)
+        except json.JSONDecodeError as exc:
+            raise SystemExit(
+                f"--positions: could not parse this as JSON: {exc}\n"
+                f"If you meant a file, note that a path must not start with "
+                f"'{{' or '['. Got: {spec[:80]!r}")
+
+    if not isinstance(raw, dict):
+        raise SystemExit(
+            f"--positions: expected an object keyed by epoch date, e.g. "
+            f'\'{{"2025-01-17": [166.456476, -0.034829]}}\'; got a '
+            f"{type(raw).__name__}.")
+
+    out = {}
+    for key, val in raw.items():
+        if isinstance(val, dict):
+            try:
+                ra, dec = val["ra"], val["dec"]
+            except KeyError:
+                raise SystemExit(f"--positions: {key!r} -> {val!r} needs 'ra' and 'dec'.")
+        elif isinstance(val, (list, tuple)) and len(val) == 2:
+            ra, dec = val
+        else:
+            raise SystemExit(
+                f"--positions: {key!r} -> {val!r} should be [ra, dec] or "
+                f"{{\"ra\": ..., \"dec\": ...}}.")
+        try:
+            pos = (float(ra), float(dec))
+        except (TypeError, ValueError):
+            raise SystemExit(f"--positions: {key!r} -> {val!r} is not a number pair.")
+        out[str(key).strip()] = pos
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -347,6 +450,16 @@ def main():
     ap.add_argument("--poly-k", type=int, default=3)
     ap.add_argument("--bin-size", type=int, default=9)
     ap.add_argument("--min-aper-rad", type=float, default=5.0)
+    ap.add_argument("--positions", default=None,
+                     help="Per-epoch source positions, as inline JSON or a path "
+                          "to a JSON/CSV file, so all epochs can be done in one "
+                          "run when each needs its own RA/Dec. Keys are epoch "
+                          "dates (YYYY-MM-DD) or full epoch stems; values are "
+                          "[ra, dec] or {\"ra\": ..., \"dec\": ...}: "
+                          "'{\"2025-01-17\": [166.456476, -0.034829], "
+                          "\"2025-06-01\": [166.456445, -0.034846]}'. A CSV "
+                          "needs date,ra,dec columns. Overrides --ra/--dec for "
+                          "the epochs it names.")
     ap.add_argument("--channel-overrides", default=None,
                      help="Per-channel background-fit overrides, as inline JSON or a "
                           "path to a JSON file, keyed by channel number: "
@@ -384,6 +497,16 @@ def main():
 
     if (args.ra is None) != (args.dec is None):
         raise SystemExit("Give both --ra and --dec, or neither.")
+
+    positions = load_positions(args.positions) if args.positions else {}
+    if positions:
+        print(f"Per-epoch positions for {len(positions)} epoch(s):")
+        for k in sorted(positions):
+            print(f"  {k}: RA={positions[k][0]:.6f}  Dec={positions[k][1]:+.6f}")
+        if args.level3_dir:
+            raise SystemExit(
+                "--positions applies to epochs discovered under --outdir; with "
+                "--level3-dir there is only one directory, so use --ra/--dec.")
 
     channel_overrides = None
     if args.channel_overrides:
@@ -426,17 +549,38 @@ def main():
             f"of cubes instead, use --level3-dir with --product-name.")
 
     print(f"{len(epochs)} MIRI-MRS epoch(s) to re-extract\n")
-    if (args.ra is not None) and len(epochs) > 1:
+    if (args.ra is not None) and len(epochs) > 1 and not positions:
         print("  NOTE: an explicit --ra/--dec was given but more than one epoch "
               "will be processed -- the same sky position is applied to all of "
-              "them. That is usually fine for a fixed target, but narrow the run "
-              "with --date if the epochs need different positions.\n")
+              "them. That is usually fine for a fixed target. If the epochs need "
+              "different positions, narrow the run with --date, or give them all "
+              "at once with --positions.\n")
+
+    if positions:
+        unmatched = [k for k in positions
+                     if k not in {d for _t, d, _l, _p in epochs}
+                     and k not in {p["stem"] for _t, _d, _l, p in epochs}]
+        if unmatched:
+            print(f"  NOTE: --positions keys matching no epoch found here: "
+                  f"{unmatched}\n")
 
     for tag, date, level3_dir, paths in epochs:
         stem = paths["stem"]
-        print(f"=== {stem}: cubes in {os.path.relpath(level3_dir, args.outdir)}")
+        # Epoch-specific position wins over the global one; falling back to
+        # --ra/--dec (or to auto-centroiding, if neither was given) keeps a
+        # partial --positions file usable.
+        pos = positions.get(stem) or positions.get(date)
+        if pos:
+            per_epoch = dict(common, ra=pos[0], dec=pos[1])
+            where = f"RA={pos[0]:.6f} Dec={pos[1]:+.6f} (from --positions)"
+        else:
+            per_epoch = common
+            where = (f"RA={args.ra:.6f} Dec={args.dec:+.6f}"
+                     if args.ra is not None else "auto-centroid per band")
+        print(f"=== {stem}: cubes in {os.path.relpath(level3_dir, args.outdir)}"
+              f"  [{where}]")
         out_base, _x1ds, _log = process_level3_dir_with_abi(
-            level3_dir, paths["reextract"], stem, **common)
+            level3_dir, paths["reextract"], stem, **per_epoch)
 
         # The combined spectrum is the product to analyse, so it is
         # promoted out of reextract/ into final/ and flagged in the index.

@@ -79,6 +79,7 @@ import subprocess
 import sys
 
 from astroquery.mast import Observations
+from jspec.pipelines._multiproposal import main_per_proposal
 
 MODES = {
     "nirspec_fs": {
@@ -146,9 +147,10 @@ def run_mode(mode_key, proposal_num, outdir, tag, common_args, max_epoch_gap_day
     return result.returncode
 
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--proposal", required=True, help="JWST proposal/program number, e.g. 1523")
+    parser.add_argument("--proposal", required=True, metavar="ID [ID ...]", help="JWST proposal/program number, e.g. 1523. Several may be given (--proposal A B C, or A,B,C); they are downloaded and reduced one after another into the same --outdir, and sort into epochs by observation date rather than by program.")
     parser.add_argument("--tag", default=None,
                          help="Optional string passed through to every pipeline that runs -- "
                               "included in each pipeline's output directory/file names.")
@@ -229,4 +231,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_per_proposal(main)

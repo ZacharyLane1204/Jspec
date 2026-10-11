@@ -82,6 +82,7 @@ from jwst.associations.lib.rules_level3_base import DMS_Level3_Base       # noqa
 
 from jspec.pipelines.astrobkginterp_thermal import apply_to_fits_file as abi_thermal_correct  # noqa: E402
 from jspec.pipelines.kde_bkg_correct import apply_to_fits_file as kde_bkg_correct  # noqa: E402
+from jspec.pipelines._multiproposal import main_per_proposal
 
 
 # ===========================================================================
@@ -283,9 +284,10 @@ def run_image3(cal_files, image3_dir, tag_suffix=""):
 # Main
 # ===========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--proposal", required=True, help="JWST proposal/program number, e.g. 1040")
+    parser.add_argument("--proposal", required=True, metavar="ID [ID ...]", help="JWST proposal/program number, e.g. 1040. Several may be given (--proposal A B C, or A,B,C); they are downloaded and reduced one after another into the same --outdir, and sort into epochs by observation date rather than by program.")
     parser.add_argument("--outdir", required=True,
                     help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     parser.add_argument("--skip-download", action="store_true",
@@ -472,4 +474,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_per_proposal(main)

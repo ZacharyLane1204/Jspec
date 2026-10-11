@@ -47,9 +47,33 @@ def _red_end(args):
 
 # ---------------------------------------------------------------------------
 def cmd_stitch(args):
+    import fnmatch
     from .epochs import group_segments_by_epoch
     from .spectrum import read_segments
     from .stitch import stitch
+
+    def _drop_excluded(segs, label):
+        """Remove segments the user asked to leave out.
+
+        The usual reason is that the quality check flagged one as
+        containing no detected source. Matching is by glob against the
+        segment name, so a partial name is enough and the same pattern
+        can cover every epoch.
+        """
+        if not args.exclude:
+            return segs
+        keep, dropped = [], []
+        for s in segs:
+            if any(fnmatch.fnmatch(s.name, pat) or pat in s.name
+                   for pat in args.exclude):
+                dropped.append(s.name)
+            else:
+                keep.append(s)
+        if dropped and not args.quiet:
+            where = f" in epoch {label}" if label else ""
+            print(f"excluding {len(dropped)} segment(s){where}: "
+                  + ", ".join(dropped))
+        return keep
 
     if args.no_epochs:
         groups = [None]
@@ -78,14 +102,18 @@ def cmd_stitch(args):
             label = g.label
             print(f"\n{'=' * 70}\nepoch {label}  ({len(segs)} segments)\n"
                   f"{'=' * 70}")
+        segs = _drop_excluded(segs, label)
         if len(segs) < 1:
+            if not args.quiet:
+                print("nothing left to stitch after exclusions")
             continue
 
         report = stitch(segs, anchor=args.anchor, edge_trim=args.trim,
                         taper=not args.no_blend, clip_sigma=args.robust_clip,
                         max_scale_factor=args.max_scale,
                         max_gap_days=args.max_gap_days,
-                        check_epoch=not args.no_epochs)
+                        check_epoch=not args.no_epochs,
+                        drop_blank=not args.keep_flagged)
         print()
         print(report.summary())
 
@@ -110,6 +138,10 @@ def cmd_stitch(args):
         failures += sum(
             1 for j in report.joins
             if j.residual and j.residual["verdict"] == "residual calibration step")
+        # A segment with no source in it is a harder failure than a
+        # residual step: the output is not merely mis-scaled, part of it
+        # is not the target at all.
+        failures += sum(1 for q in report.quality.values() if q.suspect)
 
     return 1 if (failures and args.strict) else 0
 
@@ -347,6 +379,62 @@ def cmd_info(args):
 
 
 # ---------------------------------------------------------------------------
+def cmd_verify(args):
+    """Check downloaded FITS files for truncation before a long run.
+
+    An interrupted download leaves a file whose primary header still reads
+    cleanly, so it passes every casual check and then fails hours later
+    inside the JWST pipeline as a missing ASDF extension. This finds it in
+    seconds instead.
+    """
+    from jspec.pipelines.verify_uncal import find_files, verify
+
+    files = []
+    for root in args.path:
+        files.extend(find_files(root, args.pattern))
+    if not files:
+        print(f"No files matching {args.pattern!r} under {args.path}")
+        return 1
+
+    print(f"Checking {len(files)} file(s) matching {args.pattern!r} ...")
+    bad = verify(files, verbose=args.verbose)
+    if not bad:
+        print(f"All {len(files)} file(s) complete.")
+        return 0
+
+    print(f"\n{len(bad)} of {len(files)} file(s) are incomplete:\n")
+    for path, why in bad:
+        print(f"  {path}\n      {why}")
+    print("\nDelete and re-download them with:")
+    print("  python -m jspec.pipelines.verify_uncal <dir> --delete")
+    return 1
+
+
+# ---------------------------------------------------------------------------
+def cmd_relabel(args):
+    """Rename a pre-existing output tree onto the current naming scheme.
+
+    Early runs of the NIRSpec and MIRI-LRS pipelines derived the epoch
+    directory name per-visit, so one target could end up spread across
+    ``2024aecx_20250601`` and ``sn2024aecx_20250116``. Those names are
+    invisible to the product index, which expects a trailing
+    ``YYYY-MM-DD``. This renames them in place rather than making you
+    re-run Stage 1-3, which is hours of work for a cosmetic problem.
+
+    Nothing is written without ``--apply``.
+    """
+    from .pipelines.relabel_epochs import main as relabel_main
+    argv = ["--outdir", args.outdir]
+    if args.tag:
+        argv += ["--tag", args.tag]
+    if args.instrument:
+        argv += ["--instrument", args.instrument]
+    if args.apply:
+        argv += ["--apply"]
+    return relabel_main(argv)
+
+
+# ---------------------------------------------------------------------------
 def cmd_products(args):
     """List (or rebuild) the final-product index for an output directory.
 
@@ -413,6 +501,16 @@ def build_parser():
     p.add_argument("--no-epochs", action="store_true",
                    help="DANGEROUS: stitch all inputs into one spectrum "
                         "regardless of observation date")
+    p.add_argument("--exclude", action="append", metavar="NAME",
+                   help="Leave this segment out. Matched as a glob against "
+                        "the segment name, or as a substring. Repeatable. Use "
+                        "this to drop a segment the quality check reports as "
+                        "containing no detected source")
+    p.add_argument("--keep-flagged", action="store_true",
+                   help="Stitch segments that contain no detected source "
+                        "instead of dropping them. They are dropped by "
+                        "default, because a warning alone still leaves you "
+                        "with a written file that looks like a spectrum")
     p.add_argument("--strict", action="store_true",
                    help="exit non-zero if any join is flagged as a residual "
                         "calibration step")
@@ -522,6 +620,29 @@ def build_parser():
                    help="Only show the product to analyse for each instrument "
                         "and epoch")
     p.set_defaults(func=cmd_products)
+
+    # verify -------------------------------------------------------------
+    p = sub.add_parser(
+        "verify",
+        help="check downloaded FITS files for truncation/corruption")
+    p.add_argument("path", nargs="+", help="File(s) or directory tree(s) to check")
+    p.add_argument("--pattern", default="*_uncal.fits",
+                   help="Filename pattern to check (default: %(default)s)")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="List good files as well as bad ones")
+    p.set_defaults(func=cmd_verify)
+
+    # relabel ------------------------------------------------------------
+    p = sub.add_parser(
+        "relabel",
+        help="rename an older output tree onto the <TAG>_<YYYY-MM-DD> scheme")
+    p.add_argument("outdir", help="Pipeline output directory")
+    p.add_argument("--tag", help="Display tag to use, e.g. SN2024aecx. "
+                                 "Default: inferred from the existing names")
+    p.add_argument("--instrument", help="Only touch this instrument folder")
+    p.add_argument("--apply", action="store_true",
+                   help="Actually rename. Without this, only a preview is printed")
+    p.set_defaults(func=cmd_relabel)
 
     # info ---------------------------------------------------------------
     p = _p_common(sub.add_parser("info", help="summarise a spectrum file"))

@@ -74,8 +74,15 @@ def get_mjd_range(header):
 
 
 def mjd_to_datestr(mjd):
-    """MJD -> 'YYYYMMDD' (UTC)."""
-    return Time(float(mjd), format="mjd").strftime("%Y%m%d")
+    """MJD -> 'YYYY-MM-DD' (UTC).
+
+    Delegates to :func:`jspec.layout.epoch_datestr` so that the FS route
+    labels epochs exactly the way the MRS route does. This used to
+    return 'YYYYMMDD', which is why one target could produce both
+    ``2024aecx_20250601`` and ``SN2024aecx_2025-06-01`` directories.
+    """
+    from jspec.layout import epoch_datestr
+    return epoch_datestr(mjd)
 
 
 def read_meta(path):

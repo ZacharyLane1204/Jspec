@@ -1,0 +1,26 @@
+{
+    "asn_type": "None",
+    "asn_rule": "DMSLevel2bBase",
+    "version_id": null,
+    "code_version": "3.0.0",
+    "degraded_status": "No known degraded exposures in association.",
+    "program": "09105",
+    "constraints": "No constraints",
+    "asn_id": "a3001",
+    "asn_pool": "none",
+    "products": [
+        {
+            "name": "/Users/zalane/Modules/JSpec/SN2024ahv/MIRI-LRS/SN2024ahv_2026-03-05/stage1/jw09105005001_04103_00001_mirimage",
+            "members": [
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/MIRI-LRS/SN2024ahv_2026-03-05/stage1/jw09105005001_04103_00001_mirimage_rate.fits",
+                    "exptype": "science"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/MIRI-LRS/SN2024ahv_2026-03-05/stage1/jw09105005001_04103_00002_mirimage_rate.fits",
+                    "exptype": "background"
+                }
+            ]
+        }
+    ]
+}

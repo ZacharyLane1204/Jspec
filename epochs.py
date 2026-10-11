@@ -56,6 +56,7 @@ import numpy as np
 __all__ = [
     "EpochGroup",
     "mjd_of",
+    "discover_inputs",
     "group_paths_by_epoch",
     "group_segments_by_epoch",
     "epoch_span_days",
@@ -131,6 +132,94 @@ class EpochGroup:
         return "\n".join(L)
 
 
+_SPECTRUM_EXTS = (".ecsv", ".fits")
+_SKIP_DIRS = {"uncal", "stage1", "stage2", "asn", "_downloaded_uncal",
+              "__pycache__"}
+
+
+def discover_inputs(directory):
+    """Work out which files in a pipeline output tree to stitch.
+
+    Pointing at ``<outdir>`` should Just Work, and that means answering a
+    question with a right answer rather than globbing: an epoch directory
+    holds Stage-3 cubes, per-channel spectra, PFPC output *and* the final
+    product, and stitching all of them together is meaningless.
+
+    So the manifest is consulted first. ``products.csv`` already records
+    which product is the recommended one per instrument and epoch, which
+    is exactly the question being asked. The same product can appear
+    twice -- once where it was produced, once copied into ``final/`` --
+    so entries are de-duplicated on (instrument, date, product) with the
+    copy under ``final/`` preferred.
+
+    Only if there is no manifest does it fall back to a recursive search,
+    skipping the intermediate stage directories.
+    """
+    from .manifest import read_manifest, is_recommended, _product_from_name
+    from .layout import find_epoch_dirs
+
+    def _prefer_final(chosen, key, full):
+        prev = chosen.get(key)
+        # Prefer the copy that lives in final/, so the path matches the
+        # one the documentation tells you to analyse.
+        if prev is None or (os.sep + "final" + os.sep) in full:
+            chosen[key] = full
+
+    # 1. The manifest already answers this question.
+    rows = [r for r in read_manifest(directory)
+            if str(r.get("recommended", "")).strip().lower() in ("yes", "true", "1")]
+    chosen = {}
+    for r in rows:
+        full = os.path.join(directory, r.get("path") or "")
+        if os.path.exists(full):
+            _prefer_final(chosen,
+                          (r.get("instrument"), r.get("date"), r.get("product")),
+                          full)
+    if chosen:
+        return sorted(chosen.values())
+
+    # 2. No manifest, but a recognisable pipeline tree: apply the same
+    #    rule straight off disk. Do NOT fall through to a blind walk
+    #    here -- an epoch directory holds per-channel Stage-3 spectra
+    #    that carry no MJD, so they would each be treated as a separate
+    #    epoch and stitched alone.
+    try:
+        epoch_dirs = list(find_epoch_dirs(directory))
+    except Exception:                                    # noqa: BLE001
+        epoch_dirs = []
+    if epoch_dirs:
+        for label, tag, date, epoch_path in epoch_dirs:
+            for stage in ("final", "reextract"):
+                stage_path = os.path.join(epoch_path, stage)
+                if not os.path.isdir(stage_path):
+                    continue
+                for name in sorted(os.listdir(stage_path)):
+                    if not name.endswith(".ecsv"):
+                        continue
+                    product = _product_from_name(name, tag, date) or stage
+                    if is_recommended(label, product):
+                        _prefer_final(chosen, (label, date, product),
+                                      os.path.join(stage_path, name))
+        if chosen:
+            return sorted(chosen.values())
+        raise FileNotFoundError(
+            f"found {len(epoch_dirs)} epoch director(ies) under {directory!r} "
+            "but no recommended final product in any of them. Run "
+            f"'jspec products {directory} --rebuild' to see what is there.")
+
+    # 3. A plain folder of spectra. Collapse duplicate basenames, since
+    #    the same product is often written twice.
+    found = {}
+    for root, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
+        for f in files:
+            if not f.lower().endswith(_SPECTRUM_EXTS) or f.startswith("."):
+                continue
+            full = os.path.join(root, f)
+            _prefer_final(found, f, full)
+    return sorted(found.values())
+
+
 def group_paths_by_epoch(paths_or_glob, max_gap_days=1.0):
     """Cluster files into :class:`EpochGroup` objects by exposure MJD.
 
@@ -150,13 +239,26 @@ def group_paths_by_epoch(paths_or_glob, max_gap_days=1.0):
 
     if isinstance(paths_or_glob, str):
         if os.path.isdir(paths_or_glob):
-            paths = sorted(_glob.glob(os.path.join(paths_or_glob, "*")))
+            paths = discover_inputs(paths_or_glob)
         else:
             paths = sorted(_glob.glob(paths_or_glob))
         if not paths:
             raise FileNotFoundError(f"no files match {paths_or_glob!r}")
     else:
-        paths = list(paths_or_glob)
+        paths = []
+        for item in paths_or_glob:
+            if os.path.isdir(item):
+                paths.extend(discover_inputs(item))
+            else:
+                paths.append(item)
+        paths = sorted(dict.fromkeys(paths))
+        if not paths:
+            raise FileNotFoundError(f"no usable files in {paths_or_glob!r}")
+
+    # Never hand a directory to the FITS reader.
+    paths = [p for p in paths if os.path.isfile(p)]
+    if not paths:
+        raise FileNotFoundError(f"no usable files match {paths_or_glob!r}")
 
     clusters = cno.group_files_by_epoch(paths, max_gap_days=max_gap_days)
 

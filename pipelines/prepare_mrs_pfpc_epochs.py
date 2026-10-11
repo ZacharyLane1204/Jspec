@@ -29,18 +29,31 @@ You still run pfpc_proc / pfpc_cor yourself, once per printed subdirectory
 1-3 run is expensive and worth watching per epoch, not auto-launched
 silently in a loop.
 
+This is step 1 of the recommended MIRI MRS route:
+
+    1. prepare_mrs_pfpc_epochs   <- you are here
+    2. pfpc_proc <epoch> && pfpc_cor <epoch>     (once per epoch)
+    3. import_pfpc_products      sort the flat dump into the layout
+    4. get_source_radec          measure RA/Dec in a ch1-short cube
+    5. abi_reextract_pfpc        background-subtract, extract, combine
+
+Step 4 cannot happen earlier: there is no cube to centroid in until step 2
+has run. The commands for steps 2-5 are printed at the end of this script,
+filled in with the epochs it actually found.
+
 Usage
 -----
     # Download only what's missing, then split into epoch subdirectories:
-    python prepare_mrs_pfpc_epochs.py --proposal 9233 --workdir SN2024aecx/
+    python -m jspec.pipelines.prepare_mrs_pfpc_epochs --proposal 9233 \\
+        --outdir SN2024aecx
 
     # Already have the uncal files locally (skip download, just split):
-    python prepare_mrs_pfpc_epochs.py --uncal-dir SN2024aecx/SN2024aecx_uncal \\
-        --workdir SN2024aecx/
+    python -m jspec.pipelines.prepare_mrs_pfpc_epochs \\
+        --uncal-dir SN2024aecx/_downloaded_uncal --outdir SN2024aecx
 
     # Copy instead of symlink (e.g. filesystem doesn't support symlinks):
-    python prepare_mrs_pfpc_epochs.py --uncal-dir SN2024aecx/SN2024aecx_uncal \\
-        --workdir SN2024aecx/ --copy
+    python -m jspec.pipelines.prepare_mrs_pfpc_epochs \\
+        --uncal-dir SN2024aecx/_downloaded_uncal --outdir SN2024aecx --copy
 """
 import argparse
 import glob
@@ -52,6 +65,7 @@ from astropy.io import fits
 
 from jspec.layout import ensure_epoch_tree
 from jspec.pipelines.combine_nirspec_orders import get_mjd, group_files_by_epoch, mjd_to_datestr
+from jspec.pipelines._multiproposal import main_per_proposal
 
 
 def uncal_exists(outdir, proposal_padded):
@@ -60,23 +74,33 @@ def uncal_exists(outdir, proposal_padded):
     return sorted(glob.glob(pattern))
 
 
-def download_if_missing(proposal, outdir, dataset_ids=None):
-    """Download uncal files for `proposal` into `outdir`, unless matching
-    files are already there. Reuses the same download_uncal() call
-    miri_mrs_auto_pipeline.query_and_download() makes -- see
-    download_target_uncal.py for the plain wrapper."""
+def download_if_missing(proposal, outdir, dataset_ids=None, force=False):
+    """Download uncal files for `proposal` into `outdir`.
+
+    Existing files are re-verified rather than trusted. The older version
+    of this returned early as soon as *any* matching file was present,
+    which made the whole thing a no-op on a re-run -- so a download that
+    had been interrupted midway through a file stayed broken forever, and
+    surfaced only much later as an unreadable FITS inside pfpc_proc. The
+    verification itself is cheap (headers only) and lives in
+    download_uncal, so just always call through to it.
+
+    `force=True` discards and re-fetches every file, for when you suspect
+    the local copies but cannot say which are bad.
+    """
     proposal_padded = f"{proposal:05d}"
     existing = uncal_exists(outdir, proposal_padded)
-    if existing:
+    if existing and not force:
         print(f"{len(existing)} uncal file(s) for proposal {proposal_padded} "
-              f"already in {outdir} -- skipping download.")
-        return existing
+              f"already in {outdir} -- verifying, downloading anything "
+              f"missing or incomplete.")
 
     from jspec.pipelines.mast_uncal_download import download_uncal
     os.makedirs(outdir, exist_ok=True)
     files = download_uncal(["MIRI/IFU"], proposal_padded, proposal, outdir,
-                            name_contains=("mirifu",), dataset_ids=dataset_ids)
-    print(f"Downloaded {len(files)} uncal file(s) to {outdir}")
+                            name_contains=("mirifu",), dataset_ids=dataset_ids,
+                            force=force)
+    print(f"{len(files)} uncal file(s) in {outdir}")
     return files
 
 
@@ -142,12 +166,17 @@ def split_by_epoch(uncal_files, outdir, max_gap_days=1.0, copy=False, tag=None):
     return results
 
 
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                   formatter_class=argparse.RawDescriptionHelpFormatter)
     src = ap.add_mutually_exclusive_group(required=True)
-    src.add_argument("--proposal", type=int,
-                      help="Proposal ID to download (if not already present)")
+    src.add_argument("--proposal", type=int, metavar="ID [ID ...]",
+                      help="Proposal ID to download (if not already present). "
+                           "Several may be given (--proposal A B C, or A,B,C); "
+                           "they are downloaded one after another into the same "
+                           "--outdir, and sort into epochs by observation date "
+                           "rather than by program.")
     src.add_argument("--uncal-dir",
                       help="Directory of uncal files already on disk (skip download)")
     ap.add_argument("--outdir", "--workdir", dest="outdir", required=True,
@@ -160,15 +189,54 @@ def main():
                      help="With --proposal: only these dataset IDs")
     ap.add_argument("--copy", action="store_true",
                      help="Copy files into epoch subdirectories instead of symlinking")
+    ap.add_argument("--force-download", action="store_true",
+                     help="Re-download every file from MAST even if a complete "
+                          "copy is already on disk. Normally unnecessary: "
+                          "incomplete files are detected and re-fetched "
+                          "automatically. Use when you suspect the local copies "
+                          "but cannot say which are bad.")
     args = ap.parse_args()
 
     if args.proposal is not None:
         dl_dir = os.path.join(args.outdir, "_downloaded_uncal")
-        uncal_files = download_if_missing(args.proposal, dl_dir, dataset_ids=args.dataset)
+        uncal_files = download_if_missing(args.proposal, dl_dir,
+                                           dataset_ids=args.dataset,
+                                           force=args.force_download)
+        # The staging directory is shared between proposals on purpose (one
+        # target is often observed under more than one program, and those
+        # really are separate epochs of the same object). But that means a
+        # --proposal 9233 run also picks up the 9258 files sitting next to
+        # them, which is easy to miss. Say so rather than letting epochs
+        # appear from a program the user did not just name.
+        others = sorted({os.path.basename(f)[:7] for f in uncal_files}
+                         - {f"jw{args.proposal:05d}"})
+        if others:
+            print(f"\nNote: {dl_dir} also holds uncal files from "
+                  f"{', '.join(others)}. They are in the same target directory, "
+                  f"so they are included in the epoch split below. Use "
+                  f"--uncal-dir with a directory holding only one program, or "
+                  f"--dataset, if you want them left out.")
     else:
         uncal_files = sorted(glob.glob(os.path.join(args.uncal_dir, "*mirifu*uncal.fits")))
         if not uncal_files:
             raise SystemExit(f"No *mirifu*uncal.fits files found in {args.uncal_dir}")
+        # No MAST sizes to compare against here, but the structural checks
+        # still catch a truncated file -- and catching it now is worth a
+        # great deal, because the alternative is finding out several hours
+        # into pfpc_proc.
+        from jspec.pipelines.mast_uncal_download import fits_problem
+        bad = [(f, why) for f in uncal_files
+               if (why := fits_problem(f)) is not None]
+        if bad:
+            print(f"\n{len(bad)} of {len(uncal_files)} file(s) in {args.uncal_dir} "
+                  f"are incomplete:")
+            for f, why in bad:
+                print(f"  {os.path.basename(f)}: {why}")
+            raise SystemExit(
+                "\nRefusing to continue: the JWST pipeline would fail on these "
+                "much later and much less clearly.\nDelete them and re-run with "
+                "--proposal <id> to re-download, or run:\n"
+                f"  python -m jspec.pipelines.verify_uncal {args.uncal_dir} --delete")
 
     results = split_by_epoch(uncal_files, args.outdir,
                               max_gap_days=args.max_gap_days, copy=args.copy,
@@ -193,11 +261,41 @@ def main():
 
     print("\nThen sort those outputs into the standard layout:")
     print(f"  python -m jspec.pipelines.import_pfpc_products --outdir {args.outdir}")
-    print("\nand re-extract with AstroBkgInterp to get the final spectrum")
-    print("(this is the recommended MIRI MRS product, and is what gets")
-    print("recorded in products.csv):")
-    print(f"  python -m jspec.pipelines.abi_reextract_pfpc --outdir {args.outdir}")
+
+    # The source position has to come from a cube, so it cannot be asked
+    # for any earlier than this. Measuring once in ch1-short and reusing
+    # that sky position everywhere avoids ch4 auto-centroiding onto a
+    # brighter neighbour, which fails silently.
+    print("\nNext, measure the source position in the cube you just made")
+    print("(ch1-short: largest field of view, best S/N):")
+    print(f"  python -m jspec.pipelines.get_source_radec \\")
+    print(f"      --cube {os.path.join(mrs_dir, first, 'stage3')}"
+          f"/*_level3_ch1-short_s3d.fits")
+
+    print("\nFinally, re-extract with AstroBkgInterp using that position to")
+    print("get the final spectrum (this is the recommended MIRI MRS product,")
+    print("and is what gets recorded in products.csv):")
+    print(f"  python -m jspec.pipelines.abi_reextract_pfpc --outdir {args.outdir} \\")
+    print(f"      --ra <RA> --dec <DEC>")
+    if len(results) > 1:
+        # With several epochs, the default -- one position applied to all of
+        # them -- is the thing most likely to be wrong, so show the
+        # alternatives here rather than leaving them to be found in --help.
+        print(f"\nThat processes all {len(results)} epochs with the same sky position,")
+        print("which is right for a fixed target measured once. If you measure a")
+        print("position per epoch, either do one epoch at a time:")
+        for r in results:
+            print(f"  python -m jspec.pipelines.abi_reextract_pfpc "
+                  f"--outdir {args.outdir} \\")
+            print(f"      --date {r['date']} --ra <RA> --dec <DEC>")
+        print("\nor give them all at once in a CSV with date,ra,dec columns:")
+        print(f"  python -m jspec.pipelines.abi_reextract_pfpc "
+              f"--outdir {args.outdir} --positions positions.csv")
+    else:
+        print("\nOmitting --ra/--dec is allowed -- each band then centroids")
+        print("itself -- but is less reliable at the red end where the source")
+        print("is faintest.")
 
 
 if __name__ == "__main__":
-    main()
+    main_per_proposal(main)

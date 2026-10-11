@@ -192,6 +192,7 @@ from jspec.manifest import MANIFEST_NAME, record_product  # noqa: E402
 
 # AstroBkgInterp -- https://github.com/brynickson/AstroBkgInterp
 from AstroBkgInterp.AstroBkgInterp import AstroBkgInterp  # noqa: E402
+from jspec.pipelines._multiproposal import main_per_proposal
 
 
 NRS_IFU_EXP_TYPE = "NRS_IFU"
@@ -1008,9 +1009,10 @@ def run_astrobkginterp_background(cube_file, src_x, src_y, out_dir, product_name
 # Main
 # ===========================================================================
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--proposal", required=True, help="JWST proposal/program number, e.g. 1234")
+    parser.add_argument("--proposal", required=True, metavar="ID [ID ...]", help="JWST proposal/program number, e.g. 1234. Several may be given (--proposal A B C, or A,B,C); they are downloaded and reduced one after another into the same --outdir, and sort into epochs by observation date rather than by program.")
     parser.add_argument("--outdir", required=True,
                     help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     parser.add_argument("--skip-download", action="store_true",
@@ -1061,8 +1063,11 @@ def main():
                          help="Turn on pixel_replace in Spec3 (interpolate over bad pixels before "
                               "cube building). Off by default.")
     parser.add_argument("--tag", default=None,
-                         help="Optional string included in the output directory name and in every "
-                              "Stage-3/background-subtracted filename.")
+                         help="Display name for the target, used as the stem of the epoch "
+                              "directory and of every product in it, e.g. --tag SN2024aecx "
+                              "gives SN2024aecx_2025-06-01/. Default: the target name from "
+                              "the file headers. Give this explicitly when the headers spell "
+                              "the target inconsistently between visits.")
 
     # -- AstroBkgInterp background settings --
     parser.add_argument("--src-x", type=float, default=None,
@@ -1118,7 +1123,6 @@ def main():
 
     proposal_num = int(args.proposal)
     proposal_padded = f"{proposal_num:05d}"
-    tag_suffix = f"_{args.tag}" if args.tag else ""
     outdir = os.path.abspath(args.outdir)   # absolute: association files need it
 
     # Raw downloads stage here; epochs are only known once the headers
@@ -1266,4 +1270,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_per_proposal(main)

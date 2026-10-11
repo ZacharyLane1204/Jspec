@@ -1,0 +1,27 @@
+{
+    "asn_type": "None",
+    "asn_rule": "DMS_Level3_Base",
+    "version_id": null,
+    "code_version": "3.0.0",
+    "degraded_status": "No known degraded exposures in association.",
+    "program": "noprogram",
+    "constraints": "No constraints",
+    "asn_id": "a3001",
+    "target": "none",
+    "asn_pool": "none",
+    "products": [
+        {
+            "name": "SN2024ahv_2024-03-05_f170lp_g235m_s400a1",
+            "members": [
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-03-05/stage2/jw04217001001_04102_00001_nrs1_cal.fits",
+                    "exptype": "science"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2024ahv/NIRSpec-FS/SN2024ahv_2024-03-05/stage2/jw04217001001_04102_00002_nrs1_cal.fits",
+                    "exptype": "science"
+                }
+            ]
+        }
+    ]
+}

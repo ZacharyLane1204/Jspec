@@ -49,7 +49,8 @@ import os
 from .layout import find_epoch_dirs, instrument_label, parse_epoch_dirname
 
 __all__ = ["MANIFEST_NAME", "FIELDS", "record_product", "read_manifest",
-           "write_manifest", "rebuild_manifest", "RECOMMENDED_PRODUCT"]
+           "write_manifest", "rebuild_manifest", "RECOMMENDED_PRODUCT",
+           "is_recommended"]
 
 MANIFEST_NAME = "products.csv"
 
@@ -70,6 +71,22 @@ RECOMMENDED_PRODUCT = {
 }
 
 _KEY = ("instrument", "epoch", "product")
+
+
+def is_recommended(label, product):
+    """Is `product` the one to analyse for instrument `label`?
+
+    Not a plain equality test, because the fixed-slit pipelines qualify
+    the product with the slit they came from -- a NIRSpec epoch yields
+    ``s400a1_final``, not ``final``, and an epoch observed through two
+    slits yields one of each. Both are products to analyse, so the
+    recommended token is matched as a whole trailing token rather than
+    as the entire string.
+    """
+    want = RECOMMENDED_PRODUCT.get(instrument_label(label))
+    if not want or not product:
+        return False
+    return product == want or product.endswith("_" + want)
 
 
 def _utcnow():
@@ -160,7 +177,7 @@ def record_product(outdir, instrument, target, date, ecsv_path,
         label = instrument_label(instrument)
         epoch = f"{target}_{date}"
         if recommended is None:
-            recommended = RECOMMENDED_PRODUCT.get(label) == product
+            recommended = is_recommended(label, product)
         n_rows, wmin, wmax, mjd = _spectrum_summary(ecsv_path)
 
         row = {
@@ -213,7 +230,7 @@ def rebuild_manifest(outdir, quiet=False):
                     "instrument": label, "target": tag, "date": date,
                     "epoch": f"{tag}_{date}", "level": level,
                     "product": product,
-                    "recommended": "yes" if RECOMMENDED_PRODUCT.get(label) == product else "",
+                    "recommended": "yes" if is_recommended(label, product) else "",
                     "path": _relpath(ecsv, outdir),
                     "fits_path": _relpath(fits_path, outdir)
                     if os.path.exists(fits_path) else "",

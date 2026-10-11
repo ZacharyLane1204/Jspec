@@ -1,0 +1,27 @@
+{
+    "asn_type": "None",
+    "asn_rule": "DMS_Level3_Base",
+    "version_id": null,
+    "code_version": "3.0.0",
+    "degraded_status": "No known degraded exposures in association.",
+    "program": "noprogram",
+    "constraints": "No constraints",
+    "asn_id": "a3001",
+    "target": "none",
+    "asn_pool": "none",
+    "products": [
+        {
+            "name": "SN2023dbc_2026-04-22_mirim_slit",
+            "members": [
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2023dbc/MIRI-LRS/SN2023dbc_2026-04-22/stage2/jw09264014001_04103_00001_mirimage_cal.fits",
+                    "exptype": "science"
+                },
+                {
+                    "expname": "/Users/zalane/Modules/JSpec/SN2023dbc/MIRI-LRS/SN2023dbc_2026-04-22/stage2/jw09264014001_04103_00002_mirimage_cal.fits",
+                    "exptype": "science"
+                }
+            ]
+        }
+    ]
+}

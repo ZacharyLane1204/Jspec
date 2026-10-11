@@ -61,6 +61,7 @@ __all__ = [
     "stage_dir", "ensure_epoch_tree", "product_basename", "product_path",
     "parse_epoch_dirname", "find_epoch_dirs",
     "stage_files", "find_staged_uncal",
+    "epoch_datestr", "canonical_tag", "canon_object",
 ]
 
 
@@ -131,6 +132,77 @@ def epoch_dirname(tag: str, date: str) -> str:
     tag = safe_name(tag)
     date = safe_name(date, default="unknown-date")
     return f"{tag}_{date}"
+
+
+def epoch_datestr(mjd) -> str:
+    """MJD -> ``YYYY-MM-DD`` (UTC) -- the project-wide epoch date format.
+
+    Every pipeline used to carry its own copy of this. Two of them
+    (NIRSpec FS and MIRI LRS) returned ``YYYYMMDD`` while the MRS route
+    returned ``YYYY-MM-DD``, which is why one target could end up with
+    both ``2024aecx_20250601`` and ``SN2024aecx_2025-06-01`` directories
+    in the same output tree. There is one implementation now so that
+    cannot drift again.
+
+    Returns ``"unknown-date"`` for a missing MJD rather than raising:
+    an exposure with no usable time is still worth reducing, and a
+    directory named ``<tag>_unknown-date`` is self-explanatory.
+    """
+    if mjd is None:
+        return "unknown-date"
+    try:
+        from astropy.time import Time
+        return Time(float(mjd), format="mjd").iso[:10]
+    except Exception:                                    # noqa: BLE001
+        return "unknown-date"
+
+
+#: Leading survey/discovery prefixes that are sometimes present in
+#: TARGNAME and sometimes not, for the same object, in the same program.
+_PREFIX_RE = re.compile(r"^(SN|AT|SNE)\s*(?=\d)", re.IGNORECASE)
+
+
+def canon_object(name: str) -> str:
+    """Case-folded, prefix-stripped identity used to decide "same target".
+
+    ``"SN 2024aecx"``, ``"SN2024aecx"`` and ``"2024aecx"`` all become
+    ``"2024aecx"``. This is the key to group *by*; use
+    :func:`canonical_tag` to choose the name to display and write to
+    disk.
+    """
+    return _PREFIX_RE.sub("", safe_name(name, default="")).lower()
+
+
+def canonical_tag(targets, override: str | None = None) -> str:
+    """Pick one tag for a target that is spelled inconsistently.
+
+    JWST headers are not consistent about target names: the same
+    supernova appears as ``"SN 2024aecx"`` in one visit and
+    ``"2024aecx"`` in the next. Deriving the tag per epoch therefore
+    produced per-epoch directory names (``sn2024aecx_...`` beside
+    ``2024aecx_...``) for what is obviously one target.
+
+    This resolves *all* the names seen in a run to a single tag, so every
+    epoch of one target lands under the same spelling. `override` (the
+    ``--tag`` argument) wins outright; that is the reliable way to get
+    the capitalisation you want, since header names are not dependable.
+
+    The automatic choice prefers the most specific spelling: the variant
+    carrying a prefix (``SN2024aecx``) over the bare designation, then
+    the most common, then the longest. Ties break alphabetically so the
+    result does not depend on dictionary ordering.
+    """
+    if override:
+        return safe_name(override)
+    names = [safe_name(t) for t in (targets or []) if safe_name(t, default="")]
+    if not names:
+        return "target"
+    counts = {}
+    for n in names:
+        counts[n] = counts.get(n, 0) + 1
+    def rank(n):
+        return (1 if _PREFIX_RE.match(n) else 0, counts[n], len(n), n)
+    return max(sorted(counts), key=rank)
 
 
 def epoch_dir(outdir: str, instrument: str, tag: str, date: str) -> str:

@@ -10,9 +10,13 @@ something did not arrive.
 What it adds over a bare ``query_criteria`` + ``filter_products`` +
 ``download_file`` loop:
 
-  * every download is checked (file exists, size matches what MAST lists,
-    FITS header readable); truncated files are removed and retried
-    (``retries`` times) instead of being silently kept;
+  * every download is checked -- not just "does the primary header read",
+    which a 3%-complete file passes, but every extension header, the size
+    MAST advertises, and the presence of the ASDF extension the JWST
+    datamodels need (see ``fits_problem``). Truncated files are removed
+    and retried (``retries`` times) instead of being silently kept, and
+    the same check is re-applied to files already on disk, so an
+    interrupted earlier run self-heals on the next invocation;
   * failures are reported at the end, with the data-rights status, so an
     exclusive-access file is recognisable (set ``MAST_API_TOKEN`` to fetch
     those);
@@ -30,6 +34,7 @@ from __future__ import annotations
 import glob
 import os
 import time
+import warnings
 from collections import defaultdict
 
 from astropy.io import fits
@@ -112,22 +117,81 @@ def list_uncal(instrument_names, proposal_padded, proposal_num, name_contains=()
     return entries
 
 
-def _complete(path, expected_size):
-    if not os.path.exists(path) or os.path.getsize(path) == 0:
-        return False
-    if expected_size and os.path.getsize(path) < 0.999 * expected_size:
-        return False                                    # truncated
+def fits_problem(path, expected_size=0):
+    """Why `path` is not a usable FITS file, or None if it looks complete.
+
+    A truncated download is the failure this is really guarding against,
+    and it is easy to miss: the *primary* header sits in the first few kB,
+    so ``fits.getheader(path, 0)`` happily succeeds on a file that stopped
+    downloading at 3% and is missing every extension after it. The JWST
+    pipeline then dies much later and much less clearly, with
+    ``KeyError: "Extension 'ASDF' not found."`` out of
+    ``stdatamodels.read_metadata`` -- after CRDS lookups, and after you
+    have already waited for pfpc_proc to get that far.
+
+    So check four things, cheapest first:
+
+      1. non-zero length, and at least the size MAST advertises (when
+         known -- `expected_size` is 0 if MAST's product list omitted it,
+         which is exactly when the other checks have to carry the load);
+      2. every *header* parses (``lazy_load_hdus=False`` + ``.info()``),
+         which is where astropy raises its "File may have been truncated"
+         warning -- promoted here from a warning to a failure;
+      3. the end of the last HDU's data, as implied by its header, is
+         actually within the file. On a complete JWST product these agree
+         to the byte;
+      4. an ASDF extension is present, since that is what every JWST
+         datamodel reads its metadata from.
+
+    Data is never loaded, so this stays fast enough to run over a whole
+    uncal directory (headers only, ~ms per file).
+    """
+    if not os.path.exists(path):
+        return "missing"
+    size = os.path.getsize(path)
+    if size == 0:
+        return "zero length"
+    if expected_size and size < 0.999 * expected_size:
+        return (f"truncated: {size / 1e6:.1f} MB on disk, "
+                f"MAST lists {expected_size / 1e6:.1f} MB")
     try:
-        fits.getheader(path, 0)
-    except Exception:                                   # noqa: BLE001
-        return False
-    return True
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            with fits.open(path, memmap=False, lazy_load_hdus=False) as hdul:
+                hdul.info(output=False)
+                names = [h.name for h in hdul]
+                last = hdul[-1]
+                end = last._data_offset + last._data_size
+        for w in caught:
+            if "truncat" in str(w.message).lower():
+                return f"truncated: {size / 1e6:.1f} MB on disk (astropy: file is short)"
+    except Exception as exc:                                # noqa: BLE001
+        return f"unreadable: {type(exc).__name__}: {exc}"
+    if end > size:
+        return (f"truncated: headers imply {end / 1e6:.1f} MB, "
+                f"file is {size / 1e6:.1f} MB")
+    if "ASDF" not in names:
+        return "no ASDF extension (not a complete JWST product)"
+    return None
+
+
+def _complete(path, expected_size=0):
+    """True if `path` is a complete, readable FITS file."""
+    return fits_problem(path, expected_size) is None
 
 
 def download_uncal(instrument_names, proposal_padded, proposal_num, uncal_dir,
-                   name_contains=(), dataset_ids=None, manifest_path=None, retries=MAST_RETRIES):
+                   name_contains=(), dataset_ids=None, manifest_path=None,
+                   retries=MAST_RETRIES, force=False):
     """Download every matching uncal file (restart-safe, verified). Returns the
-    sorted list of ``*uncal.fits`` present in ``uncal_dir``."""
+    sorted list of ``*uncal.fits`` present in ``uncal_dir``.
+
+    Files already on disk are re-verified with `fits_problem`, not merely
+    counted, so a truncated file left over from an interrupted run is
+    re-fetched rather than reused. `force=True` re-downloads everything
+    regardless, for the case where you suspect the local copies but cannot
+    say which.
+    """
     os.makedirs(uncal_dir, exist_ok=True)
     mast_login()
     if manifest_path is None:
@@ -143,10 +207,23 @@ def download_uncal(instrument_names, proposal_padded, proposal_num, uncal_dir,
             print(f"  WARNING: no matching files for --dataset entries: {missing}")
 
     failed = []
+    n_ok = n_redo = 0
     for i, e in enumerate(entries, 1):
         dest = os.path.join(uncal_dir, e["name"])
-        if _complete(dest, e["size"]):
-            continue
+        if force and os.path.exists(dest):
+            os.remove(dest)                             # --force: do not trust it
+            n_redo += 1
+        else:
+            why = fits_problem(dest, e["size"])
+            if why is None:
+                n_ok += 1
+                continue
+            if why != "missing":
+                # Report it: a bad local file is worth seeing, because it
+                # explains any earlier failure that pointed at this file.
+                print(f"  re-downloading {e['name']}: {why}")
+                os.remove(dest)
+                n_redo += 1
         for attempt in range(1, retries + 1):
             print(f"  [{i}/{len(entries)}] downloading {e['name']} ({e['size'] / 1e6:.0f} MB)"
                   + (f"  attempt {attempt}" if attempt > 1 else ""))
@@ -156,15 +233,20 @@ def download_uncal(instrument_names, proposal_padded, proposal_num, uncal_dir,
                 status = res[0] if isinstance(res, (tuple, list)) else res
             except Exception as exc:                                # noqa: BLE001
                 status = f"exception: {exc}"
-            if _complete(dest, e["size"]):
+            why = fits_problem(dest, e["size"])
+            if why is None:
                 break
-            print(f"    not complete ({status})")
+            print(f"    not complete ({status}): {why}")
             if os.path.exists(dest):
                 os.remove(dest)
             time.sleep(3 * attempt)
         else:
             failed.append(e)
 
+    if n_ok:
+        print(f"  {n_ok} file(s) already present and verified complete -- skipped.")
+    if n_redo:
+        print(f"  {n_redo} file(s) re-downloaded (incomplete locally or --force).")
     print(f"  {len(entries) - len(failed)}/{len(entries)} uncal files present in {uncal_dir}")
     if failed:
         print("  !! FAILED downloads (re-run to retry; rights problems need MAST_API_TOKEN):")

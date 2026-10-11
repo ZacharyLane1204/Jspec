@@ -76,7 +76,7 @@ import os
 import sys
 import time
 import warnings
-from dataclasses import dataclass, asdict, field
+from dataclasses import dataclass, asdict
 import re
 
 import numpy as np

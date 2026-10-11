@@ -74,6 +74,7 @@ eyeball judgement.
 """
 from __future__ import annotations
 
+import textwrap
 import warnings
 from dataclasses import dataclass, field
 
@@ -83,9 +84,11 @@ from .spectrum import C_KMS, Segment, Spectrum
 
 __all__ = [
     "OverlapMeasurement",
+    "SegmentQuality",
     "JoinReport",
     "StitchReport",
     "measure_overlap",
+    "assess_segment",
     "solve_scales",
     "stitch",
     "residual_step",
@@ -95,6 +98,16 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # robust helpers
 # ---------------------------------------------------------------------------
+def _short(name, width):
+    """Shorten a long segment name from the left, keeping the tail.
+
+    Segment names are built from tag + date + instrument, so the part
+    that distinguishes two of them is almost always at the end.
+    """
+    name = str(name)
+    return name if len(name) <= width else "..." + name[-(width - 3):]
+
+
 def _mad_sigma(x):
     """Median absolute deviation rescaled to a Gaussian sigma. Used instead of
     the standard deviation everywhere a few bad pixels could otherwise set the
@@ -171,6 +184,163 @@ def _local_line(wave, flux, err, lo, hi, centre, min_points=8):
         except np.linalg.LinAlgError:
             pass
     return value, sigma, slope, curv_sig
+
+
+# ---------------------------------------------------------------------------
+# per-segment quality: is there a source in this segment at all?
+# ---------------------------------------------------------------------------
+@dataclass
+class SegmentQuality:
+    """What one segment looks like on its own, before any stitching.
+
+    The stitcher is good at matching two segments that both contain the
+    source. It is equally good at matching a segment that contains the
+    source to one that does not -- it will happily find a scale factor
+    that lifts pure background noise onto a real continuum, and the
+    result looks entirely plausible. This is the guard against that.
+    """
+    name: str
+    n_points: int = 0
+    median_snr: float = np.nan       # median of flux/err
+    mean_snr: float = np.nan         # significance of the weighted mean flux
+    frac_positive: float = np.nan    # fraction of points with flux > 0
+    chi2_const: float = np.nan       # chi2/dof of a constant model, binned
+    median_flux: float = np.nan
+    flat: bool = False               # consistent with a constant
+    blank: bool = False              # consistent with no source
+    negative: bool = False           # flux sits below zero over most of the span
+    #: Size of a negative pedestal as a fraction of the neighbouring
+    #: segment's flux. Distinguishes "faint segment with a small offset"
+    #: from "extraction failed"; NaN when there is no neighbour to compare to.
+    pedestal_frac: float = np.nan
+    reason: str = ""
+
+    @property
+    def suspect(self) -> bool:
+        return self.blank or self.negative
+
+    def __repr__(self):
+        tag = ("BLANK" if self.blank else "NEGATIVE" if self.negative
+               else "flat" if self.flat else "ok")
+        return (f"<SegmentQuality {self.name}: {tag}, "
+                f"median S/N={self.median_snr:.2f}, chi2/dof={self.chi2_const:.2f}>")
+
+
+def assess_segment(seg: Segment, *, n_bins=20, min_points=30,
+                   snr_floor=3.0, flat_chi2=3.0, mean_sigma_floor=5.0,
+                   neg_snr=-3.0, neg_frac=0.25) -> SegmentQuality:
+    """Decide whether `seg` actually contains a detected source.
+
+    Two independent questions are asked, because either one alone has a
+    false-positive mode:
+
+    *Is it flat?* The segment is split into `n_bins` equal-count bins and
+    a constant is fitted to the bin means. A real astrophysical spectrum
+    -- even a featureless one -- has a continuum slope and lines, so it
+    rejects a constant with a large chi2. Pure background noise does
+    not. Binning first is what makes this work: it averages down the
+    per-pixel noise so that *structure* is being tested, not scatter.
+    Flatness alone is not damning, because a genuinely well-detected
+    source observed over a short, featureless stretch can look flat.
+
+    *Is it blank?* The median per-pixel S/N, the significance of the
+    weighted mean flux, and the fraction of positive points. An
+    off-target spectrum sits at zero (often slightly negative, from
+    background over-subtraction) with half its points below zero.
+    Brightness alone is not damning either, because a segment can be
+    bright and still be the wrong thing.
+
+    A segment is called ``blank`` only when it is *both* flat and
+    consistent with no source. That conjunction is what makes the flag
+    worth acting on rather than worth muting.
+
+    *Is it negative?* Separately, and regardless of flatness, a segment
+    whose flux sits significantly below zero over most of its span is
+    reported. A source cannot have a negative continuum, so this needs no
+    corroboration: it means the background or nod subtraction removed
+    more than was there. It is a distinct failure from a blank segment
+    and the flatness test cannot see it, because an over-subtracted
+    spectrum keeps the structure of whatever was subtracted and so
+    rejects a constant easily.
+
+    The thresholds are deliberately permissive. A missed marginal case
+    costs nothing extra -- the residual-step warning still fires -- while
+    a false alarm on real data trains you to ignore the output.
+    """
+    sp = seg.spectrum.compressed()
+    w = np.asarray(sp.wavelength, float)
+    f = np.asarray(sp.flux, float)
+    e = np.asarray(sp.flux_err, float)
+    ok = np.isfinite(w) & np.isfinite(f)
+    q = SegmentQuality(name=seg.name, n_points=int(ok.sum()))
+    if q.n_points < min_points:
+        q.reason = f"only {q.n_points} usable points; not assessed"
+        return q
+
+    w, f, e = w[ok], f[ok], e[ok]
+    have_err = np.isfinite(e) & (e > 0)
+    # Fall back to the point-to-point scatter when the file carries no
+    # usable errors. Without this the whole check silently no-ops on the
+    # products that most need it.
+    if have_err.sum() < 0.5 * f.size:
+        e = np.full_like(f, _mad_sigma(np.diff(f)) / np.sqrt(2.0))
+        have_err = np.isfinite(e) & (e > 0)
+        q.reason = "no usable errors; scatter used instead"
+    f, e, w = f[have_err], e[have_err], w[have_err]
+    if f.size < min_points:
+        q.reason = f"only {f.size} points with usable errors; not assessed"
+        return q
+
+    q.median_flux = float(np.median(f))
+    q.median_snr = float(np.median(f / e))
+    q.frac_positive = float(np.mean(f > 0))
+
+    wgt = 1.0 / e ** 2
+    mean = float(np.sum(wgt * f) / np.sum(wgt))
+    mean_err = float(1.0 / np.sqrt(np.sum(wgt)))
+    q.mean_snr = mean / mean_err if mean_err > 0 else np.nan
+
+    # Binned constant-model chi2. Equal-count bins keep every bin's error
+    # comparable, so one noisy stretch cannot dominate the statistic.
+    nb = int(max(4, min(n_bins, f.size // 10)))
+    edges = np.linspace(0, f.size, nb + 1).astype(int)
+    bm, be = [], []
+    for a, b in zip(edges[:-1], edges[1:]):
+        if b - a < 3:
+            continue
+        ww = wgt[a:b]
+        bm.append(np.sum(ww * f[a:b]) / np.sum(ww))
+        be.append(1.0 / np.sqrt(np.sum(ww)))
+    bm, be = np.asarray(bm), np.asarray(be)
+    if bm.size >= 4:
+        bw = 1.0 / be ** 2
+        const = np.sum(bw * bm) / np.sum(bw)
+        q.chi2_const = float(np.sum(((bm - const) / be) ** 2) / (bm.size - 1))
+
+    q.flat = bool(np.isfinite(q.chi2_const) and q.chi2_const < flat_chi2)
+    no_source = (
+        (not np.isfinite(q.median_snr) or q.median_snr < snr_floor)
+        # One-sided on purpose. A mean that is significantly *negative*
+        # is not evidence of a source; it is the signature of background
+        # over-subtraction on an empty aperture, which is exactly the
+        # case being caught here.
+        and (not np.isfinite(q.mean_snr) or q.mean_snr < mean_sigma_floor)
+        and q.frac_positive < 0.75
+    )
+    q.blank = bool(q.flat and no_source)
+    q.negative = bool(np.isfinite(q.median_snr) and q.median_snr <= neg_snr
+                      and q.frac_positive <= neg_frac)
+    if q.negative and not q.blank:
+        q.reason = (
+            f"median S/N {q.median_snr:+.2f} with only "
+            f"{100 * q.frac_positive:.0f}% of points above zero")
+    if q.blank and not q.reason:
+        q.reason = (
+            f"median S/N {q.median_snr:+.2f}, mean flux "
+            f"{q.mean_snr:+.1f} sigma, {100 * q.frac_positive:.0f}% of points "
+            f"positive, and consistent with a constant "
+            f"(chi2/dof={q.chi2_const:.2f})")
+    return q
 
 
 # ---------------------------------------------------------------------------
@@ -767,6 +937,8 @@ class StitchReport:
     components: list = field(default_factory=list)
     anchor: object = None
     warnings: list = field(default_factory=list)
+    quality: dict = field(default_factory=dict)   # name -> SegmentQuality
+    dropped: list = field(default_factory=list)   # segments left out of the output
 
     def summary(self) -> str:
         """A human-readable block suitable for printing or pasting into a log.
@@ -780,28 +952,48 @@ class StitchReport:
             for c in self.components:
                 lines.append(f"    {c}")
             lines.append("")
-        lines.append(f"{'segment':<16}{'scale':>10}{'+/-':>10}")
+        if self.dropped:
+            lines.append("DROPPED from the output (no source detected): "
+                         + ", ".join(self.dropped))
+            lines.append("")
+        lines.append(f"{'segment':<36}{'scale':>10}{'+/-':>10}")
         for k in self.scales:
-            lines.append(f"{k:<16}{self.scales[k]:>10.4f}"
+            lines.append(f"{_short(k, 35):<36}{self.scales[k]:>10.4f}"
                          f"{self.scale_sigma.get(k, float('nan')):>10.4f}")
         lines.append("")
-        lines.append(f"{'join':<28}{'kind':<9}{'ratio':>9}{'used':>6}   residual")
+        if self.quality:
+            lines.append(f"{'segment':<36}{'med S/N':>9}{'chi2/dof':>10}"
+                         f"{'+ve':>7}   verdict")
+            for k, q in self.quality.items():
+                verdict = ("NO SOURCE DETECTED" if q.blank
+                           else "NEGATIVE FLUX" if q.negative
+                           else "flat" if q.flat else "ok")
+                lines.append(f"{_short(k, 35):<36}{q.median_snr:>9.2f}"
+                             f"{q.chi2_const:>10.1f}"
+                             f"{100 * q.frac_positive:>6.0f}%   {verdict}")
+            lines.append("")
+        lines.append(f"{'join':<46}{'kind':<9}{'ratio':>9}{'used':>6}   residual")
         for j in self.joins:
             m = j.measurement
             ratio = f"{m.ratio:.4f}" if np.isfinite(m.ratio) else "   n/a"
             res = (f"{j.residual['step_pct']:+6.1f}% ({j.residual['sigma']:.1f}s) "
                    f"{j.residual['verdict']}" if j.residual else "n/a")
-            lines.append(f"{j.blue + '|' + j.red:<28}{m.kind:<9}{ratio:>9}"
+            pair = _short(j.blue, 21) + " | " + _short(j.red, 21)
+            lines.append(f"{pair:<46}{m.kind:<9}{ratio:>9}"
                          f"{'yes' if m.usable else 'NO':>6}   {res}")
             if not m.usable and m.reason:
-                lines.append(f"{'':<28}reason: {m.reason}")
+                lines.append(f"{'':<4}reason: {m.reason}")
             if np.isfinite(m.tilt_sigma) and m.tilt_sigma > 0 \
                     and abs(m.tilt_per_um) > 3 * m.tilt_sigma:
-                lines.append(f"{'':<28}note: ratio is wavelength dependent "
+                lines.append(f"{'':<4}note: ratio is wavelength dependent "
                              f"({m.tilt_per_um:+.3f}+/-{m.tilt_sigma:.3f} dex/um); "
                              f"a single scale factor cannot fully match this join")
         for w in self.warnings:
-            lines.append(f"! {w}")
+            # These can be long explanations, so wrap rather than emit one
+            # 500-character line that the terminal mangles.
+            wrapped = textwrap.wrap(str(w), width=72) or [""]
+            lines.append(f"! {wrapped[0]}")
+            lines.extend(f"  {ln}" for ln in wrapped[1:])
         return "\n".join(lines)
 
     def __repr__(self):
@@ -809,6 +1001,36 @@ class StitchReport:
                   if j.residual and j.residual["verdict"] == "residual calibration step")
         return (f"<StitchReport {len(self.joins)} joins, "
                 f"{len(self.scales)} segments, {bad} residual steps>")
+
+
+def _single_segment_report(seg, *, label_segments=True, quality=None,
+                           dropped=None, warns=None) -> "StitchReport":
+    """Package one segment as a finished stitch.
+
+    Factored out because there are two ways to arrive here -- one input,
+    or several of which only one survived the quality check -- and the
+    output metadata has to look the same either way. It previously did
+    not, so a spectrum that lost a segment carried no record of the
+    segments it was built from.
+    """
+    sp = seg.spectrum.copy()
+    if label_segments:
+        sp.segment = np.array([seg.name] * len(sp), dtype=object)
+    sp.meta["SEGMENTS"] = seg.name
+    sp.meta["SCALES"] = f"{seg.name}=1.00000"
+    if dropped:
+        sp.meta["DROPPED_SEGMENTS"] = ",".join(dropped)
+    quality = quality or {}
+    neg = [n for n, q in quality.items() if q.negative and not q.blank]
+    if neg:
+        sp.meta["NEGATIVE_SEGMENTS"] = ",".join(neg)
+    blank = [n for n, q in quality.items() if q.blank]
+    if blank:
+        sp.meta["BLANK_SEGMENTS"] = ",".join(blank)
+    return StitchReport(spectrum=sp, scales={seg.name: 1.0},
+                        scale_sigma={seg.name: 0.0}, anchor=seg.name,
+                        components=[[seg.name]], quality=quality,
+                        dropped=list(dropped or []), warnings=list(warns or []))
 
 
 # ---------------------------------------------------------------------------
@@ -820,7 +1042,8 @@ def stitch(segments, *, anchor=None, edge_trim=0.02, edge_trim_min_um=0.0,
            apply_scales=True, taper=True, robust_iters=2,
            verify=True, verify_half_width=0.25, redshift=None,
            label_segments=True, check_epoch=True,
-           max_gap_days=1.0) -> StitchReport:
+           max_gap_days=1.0, assess_quality=True,
+           drop_blank=True) -> StitchReport:
     """Stitch instrument segments into one continuous spectrum.
 
     Parameters
@@ -858,6 +1081,19 @@ def stitch(segments, *, anchor=None, edge_trim=0.02, edge_trim_min_um=0.0,
         Use :func:`jspec.epochs.group_segments_by_epoch` to split first.
     max_gap_days : float
         Epoch tolerance for ``check_epoch``. Matches the project-wide default.
+    assess_quality : bool
+        Check each segment on its own for a detected source before
+        stitching (see :func:`assess_segment`) and warn about any that
+        contain none. A blank segment is the one failure the matching
+        machinery cannot catch, because it matches a flat noise segment
+        to a real continuum perfectly well. Results land in
+        ``StitchReport.quality``.
+    drop_blank : bool
+        Leave segments that contain no detected source out of the output
+        entirely, rather than only warning about them. On by default: a
+        warning does not stop the file being written, and a stitched
+        spectrum whose blue half is scaled background noise looks
+        entirely convincing. Never drops the last detected segment.
 
     Returns
     -------
@@ -866,21 +1102,40 @@ def stitch(segments, *, anchor=None, edge_trim=0.02, edge_trim_min_um=0.0,
     segs = sorted([s for s in segments if len(s.spectrum)], key=lambda s: s.wmin)
     if not segs:
         raise ValueError("no segments to stitch")
+    # The same file supplied twice -- easy to do with a glob over a tree
+    # that keeps a copy of each product. Matching a spectrum to itself
+    # yields a scale of exactly 1 and a meaningless join, so drop the
+    # repeat rather than renaming it.
+    if len({s.name for s in segs}) != len(segs):
+        uniq, seen_sig, repeats = [], set(), []
+        for sg in segs:
+            sig = (sg.name, len(sg.spectrum), round(float(sg.wmin), 6),
+                   round(float(sg.wmax), 6))
+            if sig in seen_sig:
+                repeats.append(sg.name)
+                continue
+            seen_sig.add(sig)
+            uniq.append(sg)
+        if repeats:
+            segs = uniq
+            warnings.warn(
+                f"ignored {len(repeats)} duplicate segment(s) "
+                f"({', '.join(sorted(set(repeats)))}): the same spectrum was "
+                "supplied more than once", stacklevel=2)
+
     if len(segs) == 1:
-        sp = segs[0].spectrum.copy()
-        if label_segments:
-            sp.segment = np.array([segs[0].name] * len(sp), dtype=object)
-        return StitchReport(spectrum=sp, scales={segs[0].name: 1.0},
-                            scale_sigma={segs[0].name: 0.0}, anchor=segs[0].name,
-                            components=[[segs[0].name]])
+        q = {segs[0].name: assess_segment(segs[0])} if assess_quality else {}
+        return _single_segment_report(segs[0], label_segments=label_segments,
+                                      quality=q)
 
     names = [s.name for s in segs]
     if check_epoch and len(segs) > 1:
         from .epochs import check_single_epoch
         check_single_epoch(segs, max_gap_days=max_gap_days)
     if len(set(names)) != len(names):
-        # Duplicate names would collapse distinct segments in the scale
-        # dictionary and silently apply one segment's correction to another.
+        # Distinct segments that merely share a name: rename, because
+        # collapsing them in the scale dictionary would silently apply
+        # one segment's correction to another.
         seen = {}
         for i, nm in enumerate(names):
             seen[nm] = seen.get(nm, 0) + 1
@@ -889,6 +1144,102 @@ def stitch(segments, *, anchor=None, edge_trim=0.02, edge_trim_min_um=0.0,
                 segs[i] = Segment(names[i], segs[i].spectrum, segs[i].path)
 
     warns = []
+
+    # --- is every segment actually a detection? --------------------------
+    # Done before anything is measured, because a blank segment poisons
+    # everything downstream: the scale solve will try to match it, the
+    # blend will mix it in, and the result is a plausible-looking
+    # spectrum whose blue half is background noise multiplied up to the
+    # level of the half that did contain the source.
+    quality = {}
+    dropped = []
+    if assess_quality:
+        for s in segs:
+            try:
+                quality[s.name] = assess_segment(s)
+            except Exception as exc:                     # noqa: BLE001
+                warns.append(f"could not assess segment {s.name}: {exc}")
+        # Scale a negative pedestal against the brightest neighbour, so
+        # the warning can say whether it is a rounding error on a faint
+        # segment or the whole signal.
+        levels = {}
+        for sgi in segs:
+            spc = sgi.spectrum.compressed()
+            fl = np.asarray(spc.flux, float)
+            fl = fl[np.isfinite(fl)]
+            if fl.size:
+                levels[sgi.name] = float(np.median(fl))
+        for nm, qq in quality.items():
+            if not qq.negative:
+                continue
+            others = [abs(v) for k, v in levels.items()
+                      if k != nm and np.isfinite(v) and v > 0]
+            if others and np.isfinite(qq.median_flux):
+                qq.pedestal_frac = qq.median_flux / max(others)
+
+        blank = [q for q in quality.values() if q.blank]
+        detected = [q for q in quality.values()
+                    if not q.suspect and not q.flat]
+        for q in blank:
+            msg = (f"{q.name} contains no detected source: {q.reason}. ")
+            if detected:
+                msg += (
+                    "Other segments in this stitch are clearly detected, so "
+                    "the most likely explanation is that this exposure missed "
+                    "the target (a mis-centred fixed slit, or a re-extraction "
+                    "at the wrong position) rather than that the source is "
+                    "faint here. ")
+                if drop_blank:
+                    msg += ("It has been DROPPED and does not appear in the "
+                            "output; pass drop_blank=False (--keep-flagged) to "
+                            "stitch it anyway. Re-extract it at the correct "
+                            "position if you want this wavelength range.")
+                else:
+                    msg += ("It is being stitched anyway because "
+                            "drop_blank=False, so the output blueward of the "
+                            "join is background noise scaled onto a real "
+                            "continuum. Do not use it.")
+            else:
+                msg += ("No segment in this stitch is clearly detected; check "
+                        "that the extraction position is right at all. It has "
+                        "been kept, since dropping it would leave nothing.")
+            warns.append(msg)
+
+        # Actually remove them. A warning alone is not enough: the output
+        # file still gets written, still looks like a spectrum, and is
+        # the thing that ends up in a plot three weeks later.
+        if drop_blank and detected:
+            drop = {q.name for q in blank}
+            keep = [s for s in segs if s.name not in drop]
+            if keep:
+                dropped[:] = sorted(drop)
+                segs = keep
+                names = [s.name for s in segs]
+                if len(segs) == 1:
+                    return _single_segment_report(
+                        segs[0], label_segments=label_segments,
+                        quality=quality, dropped=dropped, warns=warns)
+        for q in quality.values():
+            if q.negative and not q.blank:
+                msg = (f"{q.name} sits below zero over most of its span: "
+                       f"{q.reason}. ")
+                if np.isfinite(q.pedestal_frac):
+                    msg += (f"The offset is close to constant and amounts to "
+                            f"{100 * abs(q.pedestal_frac):.0f}% of the "
+                            f"neighbouring segment's flux, so this is a small "
+                            f"over-subtraction pedestal on a genuinely faint "
+                            f"segment rather than a failed extraction. ")
+                else:
+                    msg += ("A source cannot have a negative continuum, so "
+                            "some flux has been over-subtracted. ")
+                msg += ("It is kept and stitched, since the shape may still be "
+                        "usable, but the scale factor is fitted in the overlap "
+                        "where the flux is positive -- so the join can look "
+                        "clean while the rest of the segment stays below zero. "
+                        "Treat absolute fluxes and equivalent widths here as "
+                        "unreliable, and prefer a background region that "
+                        "excludes the source if you re-reduce.")
+                warns.append(msg)
 
     # --- measure every adjacent pair, plus any non-adjacent true overlaps ---
     measurements = []
@@ -965,6 +1316,20 @@ def stitch(segments, *, anchor=None, edge_trim=0.02, edge_trim_min_um=0.0,
                       f"scales, anchor={sol['anchor']}, "
                       f"taper={'on' if taper else 'off'}, edge_trim={edge_trim}")
     meta["SEGMENTS"] = ",".join(names)
+    if dropped:
+        meta["DROPPED_SEGMENTS"] = ",".join(dropped)
+    # Record what was actually applied. Without this the output file is a
+    # dead end: you can see that it was stitched but not by how much, so a
+    # 3% cross-instrument offset cannot be told from a 30% one after the
+    # fact.
+    meta["SCALES"] = ",".join(f"{n}={scales.get(n, 1.0):.5f}" for n in names)
+    if quality:
+        blank_names = [n for n, q in quality.items() if q.blank]
+        if blank_names:
+            meta["BLANK_SEGMENTS"] = ",".join(blank_names)
+        neg_names = [n for n, q in quality.items() if q.negative and not q.blank]
+        if neg_names:
+            meta["NEGATIVE_SEGMENTS"] = ",".join(neg_names)
     out = Spectrum(w_acc, f_acc, e_acc, redshift=z,
                    flux_unit=segs[0].spectrum.flux_unit,
                    segment=seg_acc if label_segments else None, meta=meta)
@@ -1003,4 +1368,4 @@ def stitch(segments, *, anchor=None, edge_trim=0.02, edge_trim_min_um=0.0,
     return StitchReport(spectrum=out, scales=scales,
                         scale_sigma=sol["scale_sigma"], joins=joins,
                         components=sol["components"], anchor=sol["anchor"],
-                        warnings=warns)
+                        warnings=warns, quality=quality, dropped=dropped)

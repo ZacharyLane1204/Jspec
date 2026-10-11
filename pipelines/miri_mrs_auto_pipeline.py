@@ -218,6 +218,7 @@ from jspec.manifest import MANIFEST_NAME, record_product  # noqa: E402
 # AstroBkgInterp -- https://github.com/brynickson/AstroBkgInterp
 # pip install git+https://github.com/brynickson/AstroBkgInterp.git
 from AstroBkgInterp.AstroBkgInterp import AstroBkgInterp  # noqa: E402
+from jspec.pipelines._multiproposal import main_per_proposal
 
 
 # ===========================================================================
@@ -511,12 +512,12 @@ def get_epoch_groups(files, max_epoch_gap_days):
     spanning two visits.
     """
     by_target = defaultdict(list)
-    for f in cal_files:
+    for f in files:
         by_target[fits.getval(f, "TARGNAME") or "UNKNOWN_TARGET"].append(f)
 
     groups = {}
-    for targname, files in by_target.items():
-        clusters = group_files_by_epoch(files, max_gap_days=max_epoch_gap_days)
+    for targname, target_files in by_target.items():
+        clusters = group_files_by_epoch(target_files, max_gap_days=max_epoch_gap_days)
         for cluster in clusters:
             mjds = [m for m in (get_mjd(f) for f in cluster) if m is not None]
             label = mjd_to_datestr(np.mean(mjds)) if mjds else "unknown-date"
@@ -3223,9 +3224,10 @@ def _plot_epoch_comparison(results, plot_file):
         print(f"  (skipped epoch comparison plot: {exc})")
 
 
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--proposal", required=True, help="JWST proposal/program number, e.g. 1523")
+    parser.add_argument("--proposal", required=True, metavar="ID [ID ...]", help="JWST proposal/program number, e.g. 1523. Several may be given (--proposal A B C, or A,B,C); they are downloaded and reduced one after another into the same --outdir, and sort into epochs by observation date rather than by program.")
     parser.add_argument("--outdir", required=True,
                     help="Output directory for this target. Instrument and epoch subdirectories are created inside it: <outdir>/<INSTRUMENT>/<target>_<date>/{uncal,stage1,stage2,stage3,reextract,final}")
     parser.add_argument("--skip-download", action="store_true",
@@ -3475,4 +3477,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main_per_proposal(main)
