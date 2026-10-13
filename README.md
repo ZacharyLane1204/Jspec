@@ -27,7 +27,8 @@ Every section is a step in one continuous workflow.
 2. [What the workflow looks like](#2-what-the-workflow-looks-like)
 3. [Download and reduce the data](#3-download-and-reduce-the-data)
 4. [Keep your epochs apart](#4-keep-your-epochs-apart)
-5. [Stitch the segments into one spectrum](#5-stitch-the-segments-into-one-spectrum)
+5. [Steps that are not at a join](#5a-steps-that-are-not-at-a-join-jspec-steps)
+6. [Stitch the segments into one spectrum](#5-stitch-the-segments-into-one-spectrum)
 6. [Check your redshift before trusting anything](#6-check-your-redshift-before-trusting-anything)
 7. [Find the features](#7-find-the-features)
 8. [Identify them](#8-identify-them)
@@ -149,6 +150,7 @@ Tₑ=10⁴ K emissivities and says so in every result's `caveats` list.
     |
     |  separate continuum / broad / narrow jspec.continuum
     |  detect peaks and dips               jspec.features   / jspec detect
+|  measure known dust bands            jspec.features   / jspec bands
     |  match against reference lines       jspec.linedb     / jspec lines
     v
   a feature table with identifications
@@ -1115,6 +1117,194 @@ mean it.
 
 ---
 
+### Reading the join table: "residual calibration step"
+
+A join is only called a calibration step if the level difference is both
+significant *and* **unresolved**. The check that it is unresolved matters as
+much as the significance: `residual_step` works by fitting a straight line to
+each side of the join and extrapolating both into the middle, and that is
+very easily fooled. Any steep or structured continuum makes the two
+extrapolations miss each other badly, and you get a confident "residual
+calibration step" where the data is in fact perfectly continuous.
+
+On `SN2024aecx_2025-12-28` five of eleven joins were flagged that way while
+an independent search for sharp discontinuities, deliberately run at a very
+permissive threshold, found **none** of them. Requiring the change to
+complete within `max_rise_um` (0.06 um) cut that to two, and the two that
+survive complete in under 0.015 um while the five that were dropped take
+0.10-0.28 um. A real calibration step is imposed at one wavelength; resolved
+structure is not.
+
+The same table also reports when a ratio is **wavelength dependent**. That is
+not a refinement -- on the ch1 joins the tilt reaches ~2 dex/um across an
+overlap only ~0.2 um wide, so the flux ratio swings by a factor of ~2.6 from
+one end of the overlap to the other and no single scale factor can match the
+join however it is chosen. Widening `edge_trim` does not help: when the trim
+would consume the whole overlap the measurement deliberately falls back to
+the untrimmed one, because a marginal constraint beats no constraint at all.
+The fix for a tilted join is upstream, in the extraction.
+
+### How the MRS bands are matched to each other
+
+`abi_reextract_pfpc` combines its 12 channel/band extractions with the same
+global solver that `jspec stitch` uses (`--solver global`, the default).
+Every overlap is measured, and then all 12 scale factors are solved at once
+as a weighted least-squares problem on the overlap graph.
+
+The old behaviour (`--solver sequential`) merged bluest-first: band 1 into
+band 2, band 3 onto that composite, and so on. That has two structural
+faults. It is **cumulative** -- an error in one seam is inherited by
+everything redward of it -- and when a ratio fails its quality cuts the band
+is left at its *native* flux level, which does not avoid a step, it
+guarantees one. On `SN2024aecx_2025-12-07` eight of eleven seams were
+rejected that way, so most of the spectrum was never calibrated onto
+anything. The global solve down-weights a marginal overlap instead of
+discarding it: 9 of 12 bands scaled instead of 4 of 11.
+
+It also reports things the sequential merger cannot represent. On that epoch
+the overlap graph is **disconnected into three groups** -- ch2-long has no
+usable overlap on either side -- so ch1+ch2 and ch3+ch4 are anchored
+independently and the flux step between them is whatever the data happened
+to have. No merge algorithm can fix that; it has to be fixed upstream or
+tied with external photometry. Several joins are also flagged as having a
+*wavelength-dependent* ratio, where a single scale factor cannot match the
+join however it is chosen.
+
+One thing worth knowing if you change this: `--trim-edge-frac` is handed to
+the solver rather than applied to the arrays. Deleting the band edges
+shrinks the overlaps the scale factors are measured in, which on this epoch
+split the graph into four groups rather than three. The solver's own
+`edge_trim` excludes the edges from the *ratio measurement* while keeping
+the data in the output, which is what you actually want.
+
+Switching to the global solver did **not** change the four steps that
+`jspec steps` reports (16.25, 11.45, 18.14, 24.73) -- which is itself the
+useful result. They survive every matching scheme tried, so they are not
+matching failures: two are real bands and two are band-edge artefacts.
+
+## 5a. Steps that are not at a join: `jspec steps`
+
+`jspec stitch` compares two segments in their overlap, so it only sees a
+jump between things *labelled* as different segments. The harder failure
+is a step sitting inside what claims to be one continuous spectrum --
+there is no join metadata to check it against, so only the flux can
+reveal it.
+
+```bash
+jspec steps SN2024aecx/SN2024aecx_2025-12-07.ecsv
+```
+
+```
+16.170 um   x  2.84   S/N=  +48.0   1.565e-04 -> 4.449e-04
+17.960 um   x  2.01   S/N=  +14.4   5.507e-04 -> 1.105e-03
+```
+
+Both of those are real, and neither is a join. The test is the one a
+light curve uses for a break: fit the level either side of a candidate
+boundary and ask whether the difference beats the scatter within each
+side.
+
+Three things keep it from firing on every bright band:
+
+- **the change must be unresolved.** A calibration or background-model
+  step is instrumental, so it completes within a pixel or two; a real
+  band edge is resolved and takes many. `--max-rise` (default 0.06 um)
+  is the strongest of the three, because it rests on physics rather
+  than statistics.
+
+- **the jump must beat the spectrum's own gradient.** `--min-ratio`
+  (default 1.4) alone is not enough and is actively misleading on a
+  background-subtracted spectrum, which sits on a near-zero pedestal: an
+  ordinary continuum rise of a few 1e-4 becomes a factor of three. What
+  marked the real artefact at 16.2 um was that the level moved 2.2e-4 in
+  one step where its neighbours moved 2e-5. `--grad-factor` (default 3)
+  requires that.
+- **the change must persist.** The blue edge of the 11.3 um aromatic
+  band is a factor-7 rise and trips every significance test there is --
+  but by 11.5 um the flux is back down, because a band is a bump with
+  two edges. A step has one edge and never comes back. `--persist`
+  (default 0.5) requires half the jump to still be there one window
+  further on. Set `--persist 0` to see every edge, features included.
+
+It cannot tell a calibration step from an astrophysical edge, and it is
+not meant to. It says *the level changes abruptly here*, which is worth
+your attention either way.
+
+### Where the MIRI MRS steps came from
+
+Worth reading before you trust an ABI-combined spectrum, because both of
+the steps above were introduced by the reduction, not the sky.
+
+**16.2 um** is two things at once, and it took three attempts to see
+that. It is not at a channel boundary -- ch3-long spans 15.41-17.98 um
+on its own. Most of it is **real**: a spectrum combined from extractions
+that use no background model at all still shows a factor-1.48 rise
+there, which is the 16.4 um aromatic complex. ABI makes it *look* like a
+factor of 2.8 only because it removes most of the pedestal underneath
+it. On top of that there is a genuine ABI-only component, which the fine
+binning shows as a +2.2e-4 jump in a single 0.05 um bin where PFPC moves
+an ordinary +4.9e-5.
+
+The lesson is worth keeping: a large ratio in a background-subtracted
+spectrum is not evidence of an artefact, and `--skip-abi-channels 3`
+does **not** make this one go away.
+
+**17.96 um** is ch4-short's own blue edge. Its only overlap with
+ch3-long is 17.70-17.98 um, which sits entirely inside the bad region,
+so the scale factor for the whole band was measured on bad data and the
+error propagated across 17.7-21 um.
+
+### What `abi_reextract_pfpc` does about it
+
+**`--check-abi` reports, it does not repair.** It extracts every band a
+second time with the PFPC recipe and tells you about any step present in
+the ABI spectrum but not the PFPC one. It roughly doubles the runtime,
+so it is off by default.
+
+It deliberately stops at reporting, and the reason is worth stating
+because the obvious "fix" is wrong. PFPC subtracts *no* background, so
+it sits 1.2-10x above ABI on the same cube:
+
+```
+band          ABI med   PFPC med   ratio
+ch2-long    5.079e-05  4.074e-04    8.02
+ch3-short   7.789e-05  8.004e-04   10.28
+ch4-short   8.781e-04  1.498e-03    1.71
+```
+
+Substituting a PFPC band into an otherwise-ABI spectrum is an
+**additive** offset, and the overlap rescaling in the combiner is
+**multiplicative**. It cannot absorb one. Doing it does not remove the
+jump; it moves the jump to that band's edges and adds new ones. Acting
+on the report means re-running with `--channel-overrides` (a
+better-constrained background fit for that channel),
+`--skip-abi-channels` (PFPC for the whole channel, so there is no
+ABI/PFPC seam inside it), or excluding the corrupted span.
+
+Repairing the background automatically was tried and abandoned. The
+background in extracted-spectrum space is exactly `PFPC - ABI`, it is
+additive, and it should vary smoothly with wavelength -- so subtracting
+a smoothed version looks principled. It is not usable in practice: on
+ch3-long the real artefact is a 1.8e-4 depression against a background
+that fluctuates at 6e-5, only ~3 sigma, while ordinary source structure
+under the 11.3 um band shows up at 6.9 sigma because ABI's annulus
+catches some of the band. An automatic correction ranks the wrong one
+first. Better to say so than to quietly alter the flux.
+
+**`--trim-edge-frac` (default 0.02)** does run by default, and is a
+separate, safe fix: it drops 2% of each band's span from each end before
+merging. MRS band extremes have poor throughput and the least
+constrained background, so the edge is both the worst-calibrated part of
+a band and the part the next band is scaled against. It is backed off
+automatically if it would leave too little overlap to scale on. Note it
+is not enough on its own for ch4-short, whose bad region is ~9% of the
+band.
+
+**The combined spectrum is step-checked** and anything left is printed
+at the end of the run.
+
+---
+
 ## 5. Stitch the segments into one spectrum
 
 ```bash
@@ -1448,17 +1638,91 @@ identified. `--snr` defaults to 5 and `--region-snr` to 15.
 
 ### How a "feature" is defined
 
-Detection runs on a **decomposition**, not on the raw flux:
+The default detector (`--detector multiscale`) does **not** assume a
+feature's width in advance. It correlates the spectrum against a bank of
+matched filters whose widths run in a logarithmic ladder from the local
+instrumental resolution up to `--max-scale` (30 000 km/s), and keeps each
+feature at whichever width answered loudest.
+
+This matters because the older two-scale cascade had a gap. It smoothed at
+exactly two velocities, so a feature whose width fell between them — the
+6.1–6.4 µm band, which is ~14 000 km/s wide — was partly swallowed by the
+continuum and the surviving ripple was shredded into ~20 fragments. On
+`SN2024aecx_2025-12-07` that one band produced 23 separate "detections";
+the multiscale detector reports it as one, at its own width. Across the
+whole spectrum the count fell from 298 to 12, and every survivor is
+identifiable.
+
+Three design decisions are worth knowing about, because they are what make
+the counts trustworthy:
+
+- **Noise is measured on the filtered statistic, not propagated from the
+  error array.** Smoothing correlates neighbouring samples, so propagating
+  pixel errors requires assuming a correlation length and is wrong by its
+  square root when you assume it badly. The rolling MAD of the detection
+  statistic already contains the correlation, and also absorbs continuum
+  error, fringing and stitching residuals, which no error array knows
+  about.
+- **Each filter is paired with an annulus** that measures the local
+  baseline just outside the feature, so detection does not depend on the
+  continuum being right in detail.
+- **Emission and absorption are extracted together**, in one pass in
+  descending order of significance. The annulus makes every strong line
+  throw negative sidelobes; a separate absorption pass dutifully reports
+  them as real dips. Ranking both signs together lets a line claim its own
+  sidelobes instead.
+
+`--detector twoscale` restores the old behaviour for comparison. It runs on
+a **decomposition**:
 
 ```
 flux  =  continuum  +  broad  +  narrow  +  residual
 ```
 
-exactly additive. The three scales are separated in **velocity**
+exactly additive. The scales are separated in **velocity**
 (`broad_scale_kms=30000`, `narrow_scale_kms=600`), not in wavelength,
 because JWST resolving power varies by an order of magnitude across the
 range. A fixed wavelength smoothing length means something different at 2 µm
 than at 25 µm; a fixed *velocity* length means the same thing everywhere.
+
+### Why the continuum is fitted through anchors
+
+A 1.5 µm-wide band at 7.7 µm is 19% of its own wavelength. That is just as
+smooth as the continuum's own curvature, so **no choice of stiffness can
+separate them** — make the baseline stiff enough to ignore the band and it
+is too stiff to follow the real continuum. Left alone, the baseline arches
+up over the band and absorbs most of its flux.
+
+So the continuum used for detection (`anchored_continuum`) masks the
+wavelength windows of known dust and molecular bands from
+`data/dust_bands.csv`, fits through what is left, then iterates: detect,
+mask the features found, refit. Measured against the unmasked baseline on
+`SN2024aecx_2025-12-07`, this recovers **4.6×** the flux in 6.05–6.45 µm,
+**4.6×** in 7.3–9.0 µm and **2.3×** in 11.0–11.8 µm.
+
+There is a real tradeoff here, and it is reversible. At the default 30 000
+km/s stiffness the amorphous silicate bands at 9.7 and 18 µm are each about
+half their own peak wavelength wide, so they are treated as *continuum* and
+will not be reported as features. Raise `--broad-scale` to measure them
+instead. `--no-band-mask` turns the masking off entirely.
+
+Two failures sit either side of this, and both were real:
+
+- **Mask too little** and the baseline arches over the band. The width cap
+  that decides which catalogue entries get masked is now `1.5 ×` the
+  continuum stiffness. At exactly `1 ×` the cap was 0.10 at default
+  stiffness, which rejected PAH 7.7 (0.130 of its own peak) *by a hair*
+  and left the strongest aromatic band in the mid-infrared unmasked.
+- **Mask too much** and the baseline dives into the gap. A difference-
+  penalty smoother does not interpolate across a long mask, it
+  extrapolates in from both edges, and the slope at the edge carries
+  through. Across the 2.5 µm aromatic+silicate mask that drove the
+  baseline from 1.1e-4 at 7.2 µm to *negative* by 8.6 µm. Two things fix
+  it: masked samples are now held at exactly zero weight for every arPLS
+  iteration (previously `w0` was only a starting guess and was overwritten
+  on the first reweighting, so the smoother chased its own interpolated
+  filler downwards), and gaps are bridged with a shape-preserving PCHIP
+  through the anchors, which cannot overshoot them.
 
 All smoothing happens on a uniform **ln λ** grid for the same reason —
 applying a difference-penalty smoother directly to the non-uniform stitched
@@ -1570,6 +1834,55 @@ tbl = features_table(feats)
 
 ---
 
+### Measuring a band you already know is there: `jspec bands`
+
+`detect` and `bands` answer different questions, and the difference
+matters.
+
+`detect` judges every candidate against a *local* baseline taken from
+flanking annuli — the way a transient is measured against the pre-event
+baseline of a light curve. That is exactly right for a line, and it fails
+outright for a band that is as wide as the annulus itself. For the 7.7 µm
+aromatic complex the annulus lands on the 6.2 and 8.6 µm bands, so the
+baseline comes out as high as the signal and the filter reports `Z ≈ 2`
+for a band whose residual is more than twenty times the pixel noise.
+Widening the filter does not help, because it widens the annulus too.
+
+Band positions are known in advance, so there is no need to find them
+blindly:
+
+```bash
+jspec bands SN2024aecx/SN2024aecx_2025-12-07.ecsv --snr 8
+```
+
+```
+  [3] 7.22-9.53 um   (4 candidate IDs)
+      SiO fundamental        S/N=  +127.0  contrast= +2.29  peak S/N=  +33.4
+      PAH 7.7                S/N=   +65.0  contrast= +2.32  peak S/N=  +31.5
+      CH4 ice 7.7            S/N=   +64.6  contrast= +2.68  peak S/N=  +40.9
+```
+
+The flux is integrated over the catalogued window and tested against zero.
+The uncertainty is photon noise *plus* a baseline term — the continuum
+under a wide band is interpolated across a mask, so an offset error `δ`
+over a window of width `W` contributes `δ·W`, and `δ` is measured from the
+scatter in the flanking anchors. For a wide band that second term
+dominates, which is honest: the limit on a broad band is where you put the
+continuum, not how many photons you caught.
+
+Read the output as **competing identifications, not independent
+detections**. Bands whose peaks fall within `--group-frac` (8% by default)
+of each other are grouped, because one excess at 11.3 µm matches PAH, SiC,
+forsterite and AlO equally well — the measurement says there is flux
+there, not what the carrier is. `contrast` is the band's strength relative
+to the continuum beneath it, computed after median-filtering so a narrow
+line sitting on a wide band cannot masquerade as the band.
+
+Useful options: `--kinds pah silicate ice` restricts the catalogue,
+`--max-width-frac` controls which entries are too wide to be measurable as
+bands, and `-o` / `-d` write an ECSV table exactly as `detect` does.
+
+
 ## 8. Identify them
 
 `jspec detect` identifies as it goes. To browse the reference data itself:
@@ -1583,11 +1896,11 @@ jspec lines --bands --kind pah silicate
 
 The reference data lives in two CSV files you can edit:
 
-- **`data/line_list.csv`** — 107 rest-frame vacuum lines, with columns
+- **`data/line_list.csv`** — 113 rest-frame vacuum lines, with columns
   `group, species, wavelength_um, label, kind, category, expected_width,
   notes`. Covers H recombination, forbidden fine-structure lines, iron-group
   and iron-peak species, H₂ rotational lines, and coronal lines.
-- **`data/dust_bands.csv`** — broad dust and molecular features as *ranges*
+- **`data/dust_bands.csv`** — 80 broad dust and molecular features as *ranges*
   (`lam_min_um`, `lam_max_um`), not single wavelengths: CO fundamental and
   first overtone, SiO, AlO, PAH, amorphous and crystalline silicate.
 
@@ -1651,13 +1964,27 @@ redshift.
 - `--bands` shades known dust and molecular bands as labelled `axvspan`
   regions — CO fundamental and overtone, SiO, AlO, PAH, silicate. Filter
   with `--kinds molecular pah silicate` or `--names "CO fundamental"`.
+
+  By default this shades only the bands that actually **bracket a detected
+  feature**, capped at `--max-bands 18` and preferring the narrowest. The
+  table has 80 entries and the mid-infrared has overlapping PAH, silicate
+  and ice bands at nearly every wavelength, so shading all of them buries
+  the data under colour and overprints every label. `--all-bands` shades
+  everything, which is only readable on a zoomed `--range`.
 - `--features` detects and labels features inline.
 - `--regions` shades the high-S/N regions.
 - `--rebin 3`, `--log`, `--range 5 20`, `--width`, `--height`, `--dpi` for
   presentation.
-- `--max-labels` / `--label-snr` control how much is marked. A real
-  spectrum has several hundred detections and labelling them all hides
-  the spectrum, so the default is the 60 strongest.
+- `--max-labels` / `--label-snr` control how much is marked. `--label-snr`
+  defaults to 0 — label everything detected — because `--snr` is already
+  the gate that decides what is real. Raise it to thin a crowded figure
+  without re-running detection.
+
+Note that `--range` trims the spectrum *before* the continuum is fitted,
+so a zoomed figure can show slightly different features from a full-range
+one. That is intended: the continuum is better constrained over a shorter
+span. Use `--features-from` if you need the figure to match a saved table
+exactly.
 
 ### In Python
 

@@ -73,6 +73,8 @@ __all__ = [
     "arpls",
     "whittaker",
     "estimate_continuum",
+    "anchored_continuum",
+    "band_mask_ranges",
     "decompose",
     "normalise",
     "local_continuum",
@@ -139,7 +141,7 @@ def whittaker(y, lam, w=None, order=2):
 
 
 def arpls(y, lam, ratio=1e-3, max_iter=50, w0=None, w_min=1e-3,
-          local_window=None):
+          local_window=None, valid=None):
     """Asymmetrically reweighted penalized least squares baseline.
 
     (Baek, Park, Ahn & Choo 2015, *Analyst* 140, 250, with two modifications
@@ -189,6 +191,12 @@ def arpls(y, lam, ratio=1e-3, max_iter=50, w0=None, w_min=1e-3,
     D = _d2_matrix(n)
     DTD = (D.T @ D) * lam
     w = np.ones(n) if w0 is None else np.asarray(w0, dtype=float).copy()
+    if valid is not None:
+        valid = np.asarray(valid, dtype=bool)
+        if valid.shape == w.shape:
+            w = np.where(valid, w, 0.0)
+        else:
+            valid = None
 
     if local_window is None:
         cutoff_samples = 2.0 * np.pi * lam ** 0.25
@@ -210,6 +218,8 @@ def arpls(y, lam, ratio=1e-3, max_iter=50, w0=None, w_min=1e-3,
             wt = 1.0 / (1.0 + np.exp(arg))
         wt = np.where(np.isfinite(wt), wt, 1.0)
         wt = np.maximum(wt, w_min)
+        if valid is not None:
+            wt = np.where(valid, wt, 0.0)
         if np.linalg.norm(w - wt) / max(np.linalg.norm(w), 1e-30) < ratio:
             w = wt
             break
@@ -332,6 +342,15 @@ def estimate_continuum(spectrum: Spectrum, scale_kms=30000.0, method="arpls",
     dln = float(lg[1] - lg[0])
     y = np.interp(lg, np.log(w), fwd(f))
 
+    # np.interp fills masked gaps with a straight chord, and those filler
+    # samples are indistinguishable from data to the smoother. Mark the
+    # ones that have no retained sample within a grid step so they can be
+    # held at zero weight instead of being fitted.
+    lw = np.log(w)
+    j = np.clip(np.searchsorted(lw, lg), 1, lw.size - 1)
+    near = np.minimum(np.abs(lg - lw[j - 1]), np.abs(lg - lw[j]))
+    valid = near <= dln
+
     if method == "percentile":
         z = _rolling_percentile(y, scale_kms, dln,
                                 pct=10.0 if direction == "emission"
@@ -339,15 +358,18 @@ def estimate_continuum(spectrum: Spectrum, scale_kms=30000.0, method="arpls",
     else:
         lam = _lambda_for_scale(scale_kms, dln)
         if method == "whittaker" or direction == "symmetric":
-            z = whittaker(y, lam)
+            z = whittaker(y, lam, w=valid.astype(float))
         elif direction == "absorption":
-            z = -arpls(-y, lam, max_iter=max_iter)
+            z = -arpls(-y, lam, max_iter=max_iter, valid=valid)
         else:
-            z = arpls(y, lam, max_iter=max_iter)
+            z = arpls(y, lam, max_iter=max_iter, valid=valid)
 
     out = np.full(spectrum.wavelength.shape, np.nan)
     inside = ((spectrum.wavelength >= w.min()) & (spectrum.wavelength <= w.max()))
     out[inside] = inv(np.interp(np.log(spectrum.wavelength[inside]), lg, z))
+
+    if mask_ranges:
+        out = _bridge_masked_gaps(spectrum.wavelength, out, g, inside)
     return out
 
 
@@ -506,7 +528,8 @@ class Decomposition:
 def decompose(spectrum: Spectrum, broad_scale_kms=30000.0,
               narrow_scale_kms=600.0, direction="emission",
               mask_ranges=None, rest=False, noise_window_kms=None,
-              method="arpls", transform="asinh") -> Decomposition:
+              method="arpls", transform="asinh",
+              continuum=None) -> Decomposition:
     """Split a spectrum into continuum, broad, narrow and residual components.
 
     The split is a cascade of two smoothers:
@@ -532,11 +555,24 @@ def decompose(spectrum: Spectrum, broad_scale_kms=30000.0,
         pipeline errors in these products are frequently optimistic by tens of
         percent, and detection thresholds built on them produce correspondingly
         inflated detection counts.
+    continuum : array, optional
+        A continuum already computed for this spectrum -- normally from
+        :func:`anchored_continuum`. Supplying it skips the internal
+        :func:`estimate_continuum` call, so the decomposition and whatever
+        produced the continuum cannot disagree about where the baseline
+        lies. Must be the same length as ``spectrum``.
     """
-    cont = estimate_continuum(spectrum, scale_kms=broad_scale_kms,
-                              method=method, direction=direction,
-                              mask_ranges=mask_ranges, rest=rest,
-                              transform=transform)
+    if continuum is None:
+        cont = estimate_continuum(spectrum, scale_kms=broad_scale_kms,
+                                  method=method, direction=direction,
+                                  mask_ranges=mask_ranges, rest=rest,
+                                  transform=transform)
+    else:
+        cont = np.asarray(continuum, dtype=float)
+        if cont.size != len(spectrum):
+            raise ValueError(
+                f"continuum has {cont.size} points but the spectrum has "
+                f"{len(spectrum)}")
 
     g = spectrum.good & np.isfinite(cont)
     n = len(spectrum)
@@ -618,3 +654,260 @@ def normalise(spectrum: Spectrum, continuum=None, **kwargs) -> Spectrum:
     s.mask = s.mask | bad
     s.flux_unit = "normalised"
     return s
+
+
+
+def _bridge_masked_gaps(wave, cont, fitted, inside):
+    """Replace the continuum inside masked gaps with a monotone bridge.
+
+    A difference-penalty smoother does not interpolate across a long gap,
+    it *extrapolates* into it from both sides, and the slope at the gap
+    edge carries straight through. Across the 2.5 um aromatic+silicate
+    mask that sends the baseline from 1.1e-4 at 7.2 um to negative by
+    8.6 um -- below zero, and far below the observed flux, which then
+    reports the whole band as one flat elevated plateau that the matched
+    filter's local baseline cancels out. Masking the band therefore
+    failed for the opposite reason to not masking it.
+
+    PCHIP through the anchor values fixes this because it is
+    shape-preserving: the bridge cannot overshoot the anchors that
+    bracket it, so it stays between the continuum levels either side and
+    stays positive if they are. Interpolating in log-log makes the
+    default bridge a power law, which is the right prior for a dust
+    continuum.
+    """
+    try:
+        from scipy.interpolate import PchipInterpolator
+    except Exception:
+        return cont
+
+    gap = inside & ~fitted & np.isfinite(wave)
+    if not gap.any():
+        return cont
+
+    src = fitted & inside & np.isfinite(cont) & (wave > 0)
+    if src.sum() < 4:
+        return cont
+
+    lw = np.log(wave[src])
+    cv = cont[src]
+    order = np.argsort(lw)
+    lw, cv = lw[order], cv[order]
+    lw, uniq = np.unique(lw, return_index=True)
+    cv = cv[uniq]
+    if lw.size < 4:
+        return cont
+
+    # Log-space where the anchors allow it, linear where they do not --
+    # a continuum that legitimately crosses zero must not be forced
+    # positive just to keep the interpolation in log space.
+    positive = np.all(cv > 0)
+    yv = np.log(cv) if positive else cv
+    bridge = PchipInterpolator(lw, yv, extrapolate=False)(np.log(wave[gap]))
+    if positive:
+        bridge = np.exp(bridge)
+
+    out = cont.copy()
+    idx = np.flatnonzero(gap)
+    ok = np.isfinite(bridge)
+    out[idx[ok]] = bridge[ok]
+    return out
+
+
+# ------------------------------------------------- anchored continuum ----
+
+def band_mask_ranges(bands=None, kinds=None, pad_frac=0.05,
+                     max_width_frac=None, scale_kms=30000.0, redshift=0.0,
+                     max_cover_frac=0.55):
+    """Observed-frame wavelength ranges of known dust and molecular bands.
+
+    These are the regions a continuum fit must *not* be allowed to follow.
+    A generic smoothness prior cannot tell a 1.5 um wide aromatic complex
+    from curvature of the underlying dust continuum -- both are smooth on
+    the same scale -- so no choice of stiffness separates them. The only
+    way out is to say in advance where the bands are, fit the continuum
+    through the anchor regions in between, and interpolate across.
+
+    Parameters
+    ----------
+    max_width_frac : float, optional
+        Bands wider than this fraction of their own peak wavelength are
+        **not** masked. Defaults to ``scale_kms / c``, which is the honest
+        answer: a band broader than the continuum's own stiffness is not
+        distinguishable from continuum curvature by this method, and
+        masking it would leave no anchors on either side -- the fit there
+        would be pure extrapolation, which is worse than the
+        feature-absorbing fit it replaced.
+
+        The practical consequence is that the amorphous silicate bands at
+        9.7 and 18 um (each roughly half their own peak wavelength wide)
+        are treated as continuum at the default stiffness. That is a
+        scientific choice and it is reversible: raise ``scale_kms`` to
+        make the continuum stiffer and they will be masked and measured as
+        features instead.
+    max_cover_frac : float
+        Upper bound on the fraction of the covered wavelength span that
+        may be masked. If the bands exceed it, every block is shrunk about
+        its own centre by one common factor. Uniform shrinking is the
+        point: it keeps each mask where its band actually is, whereas
+        shrinking an over-wide merged block in isolation slides the mask
+        off the band entirely.
+    scale_kms : float
+        The continuum stiffness the mask is being built for.
+    redshift : float
+        Shifts the (rest-frame) band definitions to the observed frame.
+    """
+    from .linedb import load_bands
+    if bands is None:
+        bands = load_bands()
+    if kinds is not None:
+        kinds = {str(k).lower() for k in kinds}
+        bands = bands[bands["kind"].astype(str).str.lower().isin(kinds)]
+    if max_width_frac is None:
+        # 1.5x the continuum's own stiffness length. The factor matters:
+        # at exactly scale_kms / c the cap is 0.10 at the default
+        # stiffness, which rejects PAH 7.7 (0.130 of its peak) by a hair
+        # and leaves the strongest aromatic band in the mid-infrared
+        # unmasked -- the baseline then arches over it and absorbs it,
+        # which is precisely the failure this function exists to prevent.
+        # At 1.5x the cap is 0.15, which admits PAH 7.7, PAH 8.6, CS and
+        # the silica band while still rejecting the plateaux (0.25-0.50)
+        # and the featureless carbon continua (1.6-1.8).
+        max_width_frac = float(np.clip(1.5 * scale_kms / C_KMS, 0.05, 0.45))
+
+    out = []
+    for _, row in bands.iterrows():
+        lo, hi = row.get("lam_min_um"), row.get("lam_max_um")
+        peak = row.get("lam_peak_um")
+        try:
+            lo, hi, peak = float(lo), float(hi), float(peak)
+        except (TypeError, ValueError):
+            continue
+        if not (np.isfinite(lo) and np.isfinite(hi)) or hi <= lo:
+            continue
+        if not (np.isfinite(peak) and peak > 0):
+            peak = 0.5 * (lo + hi)
+        if (hi - lo) / peak > max_width_frac:
+            # Deliberately skipped, not shrunk. Entries this wide are
+            # plateaux and continua rather than bands -- 'PAH plateau 6-9',
+            # 'SiO fundamental' (7.5-9.5), 'Amorphous carbon' (2-30) -- and
+            # masking even their cores chains every aromatic and silicate
+            # entry into one block spanning 5.5-13 um, which the continuum
+            # can only bridge by extrapolation. Skipping them is what keeps
+            # the individual band masks separated by usable anchors.
+            continue
+        pad = pad_frac * (hi - lo)
+        out.append(((lo - pad) * (1.0 + redshift), (hi + pad) * (1.0 + redshift)))
+
+    # Adjacent bands chain into one block that swallows the spectrum -- the
+    # aromatics between 6 and 9 um do exactly this, merging into a single
+    # 5.5-12.5 um span. Two things must not happen when that is cut back:
+    # the mask must not *move* (shrinking a merged block about its centre
+    # relocates it to 9.8-11.3 um, leaving the 7.7 um complex completely
+    # unmasked and the baseline free to arch over it), and no single block
+    # may be wide enough that bridging it is pure extrapolation.
+    #
+    # So shrink every block about its own centre by one common factor,
+    # chosen as the largest that brings total coverage within
+    # max_cover_frac. A uniform factor preserves where the masks are and
+    # their relative sizes, and always leaves anchors between them.
+    merged = _merge_ranges(out)
+    if not merged:
+        return merged
+    span_lo = min(a for a, _ in merged)
+    span_hi = max(b for _, b in merged)
+    total = span_hi - span_lo
+    covered = sum(b - a for a, b in merged)
+    if total > 0 and covered / total > max_cover_frac:
+        f = (max_cover_frac * total) / covered
+        merged = [(0.5 * (a + b) - 0.5 * f * (b - a),
+                   0.5 * (a + b) + 0.5 * f * (b - a)) for a, b in merged]
+    return _merge_ranges(merged)
+
+
+def _merge_ranges(ranges):
+    """Union of possibly overlapping (lo, hi) intervals."""
+    rs = sorted((float(a), float(b)) for a, b in ranges if b > a)
+    if not rs:
+        return []
+    out = [list(rs[0])]
+    for a, b in rs[1:]:
+        if a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return [tuple(r) for r in out]
+
+
+def anchored_continuum(spectrum: Spectrum, scale_kms=30000.0, bands=True,
+                       band_kinds=None, n_iter=2, zmin=4.0, grow=1.0,
+                       max_mask_frac=0.5, scales_kms=None, extra_masks=None,
+                       **kwargs) -> np.ndarray:
+    """Continuum fitted through anchor regions, with features masked out.
+
+    This is the continuum to use when you care about broad features. It
+    differs from :func:`estimate_continuum` in two ways:
+
+    1. Known dust and molecular band windows are excluded from the fit
+       (see :func:`band_mask_ranges`).
+    2. It iterates. A first pass gives a provisional continuum; features
+       detected against it are masked; the continuum is refitted through
+       what is left. Two passes are plenty -- the masks stop moving.
+
+    The result is a continuum that passes *under* a broad band instead of
+    arching over it, so the band's flux ends up in the feature where it
+    belongs rather than being quietly absorbed into the baseline.
+
+    Parameters
+    ----------
+    grow : float
+        Masks are widened by this fraction of each feature's width on each
+        side, so the fit is not pulled up by the feature's wings.
+    max_mask_frac : float
+        Safety valve. If masking would remove more than this fraction of
+        the spectrum there are too few anchors left to constrain anything,
+        so the feature masks are dropped and only the band masks are kept.
+    """
+    from .multiscale import significance_bank, extract_peaks, default_scales
+
+    masks = list(extra_masks or [])
+    if bands:
+        masks += band_mask_ranges(kinds=band_kinds, scale_kms=scale_kms,
+                                  redshift=float(getattr(spectrum, "redshift", 0.0) or 0.0))
+    masks = _merge_ranges(masks)
+
+    cont = estimate_continuum(spectrum, scale_kms=scale_kms,
+                              mask_ranges=masks or None, **kwargs)
+    if n_iter <= 0:
+        return cont
+
+    if scales_kms is None:
+        scales_kms = default_scales(spectrum, max_kms=min(scale_kms * 0.6, 30000.0))
+
+    w = spectrum.wavelength
+    total = float(np.nanmax(w) - np.nanmin(w))
+    base = list(masks)
+    for _ in range(int(n_iter)):
+        resid = spectrum.flux - cont
+        g = spectrum.good & np.isfinite(resid)
+        if g.sum() < 32:
+            break
+        try:
+            lam, Z, D = significance_bank(w[g], resid[g], scales_kms)
+        except ValueError:
+            break
+        found = extract_peaks(lam, Z, D, scales_kms, zmin=zmin, signed=True)
+        if not found:
+            break
+        feat = []
+        for f in found:
+            half = grow * max(f["hi"] - f["lo"], f["fwhm_um"])
+            feat.append((f["lo"] - half, f["hi"] + half))
+        trial = _merge_ranges(base + feat)
+        covered = sum(b - a for a, b in trial)
+        if total > 0 and covered / total > max_mask_frac:
+            break
+        masks = trial
+        cont = estimate_continuum(spectrum, scale_kms=scale_kms,
+                                  mask_ranges=masks or None, **kwargs)
+    return cont

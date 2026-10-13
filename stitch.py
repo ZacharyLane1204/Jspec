@@ -865,7 +865,7 @@ def _blend_pair(w1, f1, e1, w2, f2, e2, taper=True, edge_trim_output=0.0):
 # post-stitch verification
 # ---------------------------------------------------------------------------
 def residual_step(spectrum: Spectrum, centre: float, half_width=0.25, gap=0.01,
-                  min_points=8):
+                  min_points=8, max_rise_um=0.06):
     """Measure the flux discontinuity at ``centre`` in an already-stitched
     spectrum.
 
@@ -882,6 +882,21 @@ def residual_step(spectrum: Spectrum, centre: float, half_width=0.25, gap=0.01,
     a nominally significant step is expected and does not indicate a
     calibration failure -- that distinction is why the curvature term is
     computed at all.
+
+    The curvature term alone is not sufficient, though. Fitting a straight
+    line to each side and extrapolating both into the middle is very easily
+    fooled: any steep or structured continuum makes the two extrapolations
+    miss each other by a lot, and the result is a confident "residual
+    calibration step" where the data is in fact perfectly continuous. On
+    SN2024aecx_2025-12-28 this fired at five of eleven joins while an
+    independent search for sharp discontinuities found none of them.
+
+    So the measured difference is also required to be *unresolved*: a genuine
+    calibration step is imposed at one wavelength and completes within a pixel
+    or two, whereas real structure takes many (see
+    :func:`jspec.discontinuity.transition_width_um`). ``max_rise_um=0``
+    disables that check and restores the old linear-extrapolation-only
+    behaviour.
     """
     g = spectrum.good
     w, f, e = spectrum.wavelength[g], spectrum.flux[g], spectrum.flux_err[g]
@@ -898,15 +913,36 @@ def residual_step(spectrum: Spectrum, centre: float, half_width=0.25, gap=0.01,
     step_pct = 100.0 * diff / denom if denom > 0 else np.nan
     nsig = abs(diff) / sig_diff if sig_diff > 0 else np.inf
 
+    # Sharpness has to be measured against robust *medians* of the real data
+    # on each side, not against the line extrapolations above: vb and vr are
+    # values the spectrum may never actually take near the join, so the 10%
+    # and 90% thresholds would both be crossed at the first sample and every
+    # join would look infinitely sharp.
+    rise = float("nan")
+    if max_rise_um > 0:
+        from .discontinuity import _levels, transition_width_um
+        mb = (w >= centre - half_width) & (w <= centre - gap)
+        mr = (w >= centre + gap) & (w <= centre + half_width)
+        lo_med, _, nb = _levels(f[mb])
+        hi_med, _, nr = _levels(f[mr])
+        if nb >= 3 and nr >= 3 and np.isfinite(lo_med) and np.isfinite(hi_med) \
+                and hi_med != lo_med:
+            rise = transition_width_um(w, f, centre, lo_med, hi_med - lo_med,
+                                       window_um=half_width)
+
     if nsig < 2:
         verdict = "continuous"
     elif np.isfinite(curv) and curv > 3:
         verdict = "step significant but spectrum is locally curved here (likely real structure)"
+    elif np.isfinite(rise) and rise > max_rise_um:
+        verdict = (f"level differs but the change is resolved "
+                   f"({rise:.3f} um to complete, > {max_rise_um:g}); "
+                   f"real structure, not a join artefact")
     else:
         verdict = "residual calibration step"
     return dict(centre=float(centre), blue_level=vb, red_level=vr,
                 step_pct=float(step_pct), sigma=float(nsig),
-                curvature_sig=curv, verdict=verdict)
+                curvature_sig=curv, rise_um=rise, verdict=verdict)
 
 
 # ---------------------------------------------------------------------------

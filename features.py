@@ -51,10 +51,12 @@ import os
 from dataclasses import dataclass, field
 
 import numpy as np
+import pandas as pd
+from scipy.ndimage import median_filter
 from scipy.signal import find_peaks
 
-from .continuum import Decomposition, decompose
-from .spectrum import C_KMS, Spectrum, instrumental_sigma_kms, resolving_power
+from .continuum import Decomposition, _local_mad, decompose
+from .spectrum import C_KMS, Spectrum, resolving_power
 
 __all__ = [
     "Feature",
@@ -65,6 +67,10 @@ __all__ = [
     "identify",
     "features_table",
     "features_from_table",
+    "find_features_multiscale",
+    "BandMeasurement",
+    "measure_bands",
+    "bands_table",
 ]
 
 _FWHM = 2.0 * np.sqrt(2.0 * np.log(2.0))
@@ -138,6 +144,7 @@ class Feature:
     on_join: bool = False
     join_fraction: float = 0.0
     segments: tuple = ()
+    scale_kms: float = float("nan")
     matches: list = field(default_factory=list)
     bands: list = field(default_factory=list)
 
@@ -529,9 +536,6 @@ def high_snr_regions(spectrum: Spectrum, snr_min=10.0, min_width_kms=500.0,
         return []
 
     merge_gap_kms = merge_gap_kms if merge_gap_kms is not None else min_width_kms
-    edges = np.flatnonzero(np.diff(above.astype(int)))
-    starts = list(edges[::2] + 1) if not above[0] else [0] + list(edges[1::2] + 1)
-    # Simpler and less error-prone: derive runs directly.
     runs = []
     i = 0
     n = above.size
@@ -585,7 +589,8 @@ def high_snr_regions(spectrum: Spectrum, snr_min=10.0, min_width_kms=500.0,
 # ---------------------------------------------------------------------------
 def identify(features, lines=None, bands=None, tol_kms=None,
              tol_res_elements=2.0, use_width_class=True, mode=None,
-             categories=None, exclude_categories=None, max_candidates=8):
+             categories=None, exclude_categories=None, max_candidates=8,
+             prefer_bands=True, max_broad_tol_kms=8000.0):
     """Attach candidate line identifications and band memberships to features.
 
     Modifies the features in place (filling ``matches`` and ``bands``) and
@@ -616,14 +621,45 @@ def identify(features, lines=None, bands=None, tol_kms=None,
             tol = max(0.5 * f.fwhm_kms, tol_res_elements * (f.resolution_fwhm_kms
                                                             if np.isfinite(f.resolution_fwhm_kms)
                                                             else 300.0))
+        if tol is not None and max_broad_tol_kms is not None:
+            tol = min(tol, max_broad_tol_kms)
         f.matches = match_line(
             f.rest_center, lines=lines, observed_wavelength_um=f.center,
             tol_kms=tol, tol_res_elements=tol_res_elements,
             width=f.width_class if use_width_class else None,
             categories=categories, exclude_categories=exclude_categories,
             mode=mode, max_candidates=max_candidates)
-        f.bands = list(bands_covering(f.rest_center, bands=bands)["name"])
+        covering = bands_covering(f.rest_center, bands=bands)
+        f.bands = list(covering["name"])
+        if prefer_bands and f.matches and len(covering):
+            f.matches = _demote_lines_under_bands(f, covering)
     return features
+
+
+def _demote_lines_under_bands(feature, covering):
+    """Drop line IDs that a covering dust band explains better.
+
+    A broad feature gets a tolerance of half its own width, which for a
+    0.4 um-wide solid-state band is several thousand km/s -- wide enough to
+    sweep up an unrelated coronal line and report it as the identification.
+    That is a confident wrong answer, and the 11.3 um aromatic band being
+    labelled [Ca V] 11.48 is exactly the failure it produces.
+
+    The rule here is comparative, not absolute: a line is only kept if its
+    centre is closer to the measured centre than the nearest covering
+    band's peak is. A genuine broad ejecta line sitting on top of a band
+    still wins, because it is better centred; a band mistaken for a line
+    does not.
+    """
+    peaks = pd.to_numeric(covering.get("lam_peak_um"), errors="coerce")
+    peaks = peaks[np.isfinite(peaks)] if peaks is not None else []
+    if len(peaks) == 0:
+        return feature.matches
+    band_off = float(np.min(np.abs(np.asarray(peaks, dtype=float)
+                                   - feature.rest_center)))
+    kept = [m for m in feature.matches
+            if abs(m.observed_rest_um - m.rest_um) <= band_off]
+    return kept
 
 
 def features_table(features):
@@ -733,3 +769,359 @@ def features_from_table(table):
         f._n_candidates = int(col(row, "n_candidates", len(matches)) or 0)
         out.append(f)
     return out
+
+
+# ------------------------------------------------ multi-scale detection ----
+
+def _pixel_noise(spectrum, resid):
+    """Per-pixel 1-sigma: the formal error where it exists, otherwise a
+    local robust scatter of the residual."""
+    err = np.asarray(spectrum.flux_err, dtype=float)
+    if np.isfinite(err).sum() > 0.5 * err.size and np.nanmedian(err) > 0:
+        return err
+    return _local_mad(resid, 101)
+
+
+def find_features_multiscale(spectrum: Spectrum, continuum=None, snr_min=5.0,
+                             signs=("emission", "absorption"),
+                             scales_kms=None, n_scales=14,
+                             max_scale_kms=30000.0, mode=None,
+                             exclude_joins=False, max_join_fraction=1.0,
+                             kill_width=1.5, broad_kms=1000.0,
+                             continuum_kwargs=None,
+                             **bank_kwargs) -> list[Feature]:
+    """Detect features without assuming their width in advance.
+
+    This is the detector to prefer. :func:`find_features` searches exactly
+    two fixed smoothing scales, so a feature whose width falls between them
+    is partly absorbed by the continuum and partly shredded into fragments
+    by the narrow smoother. This one runs a bank of matched filters from
+    the instrumental resolution up to ``max_scale_kms`` and lets the data
+    pick the scale, then merges across scales so each real feature is
+    reported once, at its own width.
+
+    Significance is measured against a *local* baseline taken from flanking
+    windows and a noise estimated from the observed scatter of that same
+    statistic -- the way a transient is measured against the pre-event
+    baseline of a light curve. See :mod:`jspec.multiscale`.
+
+    Parameters
+    ----------
+    continuum : array, optional
+        Continuum to subtract. Defaults to
+        :func:`jspec.continuum.anchored_continuum`, which keeps broad bands
+        out of the baseline; pass your own to override.
+    snr_min : float
+        Threshold on the matched-filter significance.
+    max_scale_kms : float
+        Widest feature searched for. Features broader than this are
+        continuum as far as this function is concerned.
+    broad_kms : float
+        Intrinsic width above which a feature is labelled ``'broad'``.
+    """
+    from .continuum import anchored_continuum
+    from .multiscale import significance_bank, extract_peaks, default_scales
+
+    if continuum is None:
+        continuum = anchored_continuum(spectrum, **(continuum_kwargs or {}))
+    continuum = np.asarray(continuum, dtype=float)
+    resid = spectrum.flux - continuum
+
+    good = spectrum.good & np.isfinite(resid)
+    if good.sum() < 32:
+        return []
+    if scales_kms is None:
+        scales_kms = default_scales(spectrum, n=n_scales, max_kms=max_scale_kms)
+    scales_kms = np.asarray(scales_kms, dtype=float)
+
+    w = spectrum.wavelength
+    lam, Z, D = significance_bank(w[good], resid[good], scales_kms, **bank_kwargs)
+
+    raw = []
+    for d in extract_peaks(lam, Z, D, scales_kms, zmin=snr_min,
+                           kill_width=kill_width, signed=True):
+        if d["sign"] in signs:
+            raw.append((d, d["sign"]))
+
+    pix_noise = _pixel_noise(spectrum, resid)
+    out = []
+    for d, sign in raw:
+        f = _measure_multiscale(spectrum, resid, continuum, pix_noise,
+                                d, sign, mode, broad_kms)
+        if f is None:
+            continue
+        if exclude_joins and f.on_join:
+            continue
+        if f.join_fraction > max_join_fraction:
+            continue
+        out.append(f)
+
+    out = _dedupe(out)
+    out.sort(key=lambda f: f.rest_center)
+    return out
+
+
+def _measure_multiscale(spectrum, resid, continuum, pix_noise, d, sign,
+                        mode, broad_kms):
+    """Turn one entry from :func:`extract_peaks` into a Feature, with all
+    quantities measured on the *unsmoothed* spectrum inside its extent."""
+    w = spectrum.wavelength
+    sl = np.flatnonzero(spectrum.good & (w >= d["lo"]) & (w <= d["hi"])
+                        & np.isfinite(resid))
+    if sl.size < 3:
+        return None
+    i_lo, i_hi = int(sl[0]), int(sl[-1])
+    ww = w[sl]
+    sgn = 1.0 if sign == "emission" else -1.0
+    yy = sgn * resid[sl]
+    nn = np.abs(pix_noise[sl])
+
+    wt = np.clip(yy, 0.0, None)
+    swt = wt.sum()
+    if swt <= 0:
+        return None
+    centre = float(np.sum(ww * wt) / swt)
+    with np.errstate(invalid="ignore"):
+        dc = np.sqrt(np.sum(((ww - centre) * nn) ** 2)) / swt
+    centre_err = float(dc) if np.isfinite(dc) else np.nan
+
+    trapz = np.trapezoid if hasattr(np, "trapezoid") else np.trapz
+    flux = float(trapz(yy, ww))
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        pk = np.nanmax(np.where(nn > 0, yy / nn, np.nan))
+    peak_snr = float(pk) if np.isfinite(pk) else np.nan
+
+    fwhm_um = float(d["fwhm_um"])
+    fwhm_kms = C_KMS * fwhm_um / centre
+    r = float(resolving_power(centre, mode=mode))
+    res_fwhm = C_KMS / r if np.isfinite(r) and r > 0 else np.nan
+
+    if np.isfinite(res_fwhm) and fwhm_kms <= 1.2 * res_fwhm:
+        width_class, intrinsic = "unresolved", np.nan
+    else:
+        intrinsic = (np.sqrt(max(fwhm_kms ** 2 - res_fwhm ** 2, 0.0))
+                     if np.isfinite(res_fwhm) else fwhm_kms)
+        width_class = "broad" if intrinsic >= broad_kms else "narrow"
+
+    cmed = float(np.nanmedian(continuum[sl]))
+    eqw = float(flux / cmed) if np.isfinite(cmed) and cmed != 0 else np.nan
+    on_join, jfrac, segs = _join_info(spectrum, i_lo, i_hi)
+    z = spectrum.redshift
+    return Feature(
+        center=centre, rest_center=centre / (1.0 + z), center_err=centre_err,
+        lo=float(d["lo"]), hi=float(d["hi"]),
+        # 'component' records which scale regime the detection came from.
+        # Unlike the two-component detector, here it is derived from the
+        # *measured* FWHM where that is available, falling back to the
+        # matched trial scale. Using the measurement keeps this field
+        # consistent with the fwhm_kms printed beside it; the matched scale
+        # is only the filter that fired loudest, and can sit a factor of a
+        # few away from the width the feature actually turns out to have.
+        component=("broad"
+                   if (fwhm_kms if np.isfinite(fwhm_kms) else d["scale_kms"])
+                   >= broad_kms else "narrow"),
+        sign=sign, peak_snr=peak_snr, integrated_snr=float(d["z"]),
+        amplitude=float(d["amplitude"]), flux=sgn * flux, eqw_um=sgn * eqw,
+        fwhm_um=fwhm_um, fwhm_kms=float(fwhm_kms),
+        intrinsic_fwhm_kms=float(intrinsic) if np.isfinite(intrinsic) else np.nan,
+        width_class=width_class,
+        resolution_fwhm_kms=float(res_fwhm) if np.isfinite(res_fwhm) else np.nan,
+        continuum_level=cmed, on_join=on_join, join_fraction=jfrac,
+        segments=segs, scale_kms=float(d["scale_kms"]))
+
+
+# ---------------------------------------------------------------- bands ----
+
+@dataclass
+class BandMeasurement:
+    """Flux measured in a known band window, significant or not.
+
+    Attributes
+    ----------
+    name, species, kind : str
+        Identification copied from the band table.
+    lo, hi, peak : float
+        Observed-frame window and band peak, in microns.
+    flux : float
+        Continuum-subtracted flux integrated over the window.
+    flux_err : float
+        Photon noise and baseline-placement uncertainty, added in
+        quadrature. The second term usually dominates for a wide band.
+    snr : float
+        ``flux / flux_err``. Signed: negative means absorption.
+    peak_resid, peak_snr : float
+        Largest continuum-subtracted excursion in the window after median
+        filtering, and its significance against the local pixel noise.
+        Filtering matters: unfiltered, a wide window peaks on whatever
+        narrow line happens to sit on the band.
+    contrast : float
+        Peak excursion divided by the continuum under it -- the band's
+        strength relative to the source, independent of distance.
+    n_pix : int
+        Good pixels in the window.
+    """
+
+    name: str
+    species: str
+    kind: str
+    lo: float
+    hi: float
+    peak: float
+    flux: float
+    flux_err: float
+    snr: float
+    peak_resid: float
+    peak_snr: float
+    contrast: float
+    n_pix: int
+
+    def __repr__(self) -> str:
+        return (f"<Band {self.name} {self.lo:.2f}-{self.hi:.2f}um "
+                f"S/N={self.snr:+.1f} contrast={self.contrast:+.2f}>")
+
+
+def measure_bands(spectrum: Spectrum, continuum=None, bands=None, kinds=None,
+                  snr_min=3.0, min_pix=8, max_width_frac=0.6,
+                  flank_frac=0.5, continuum_kwargs=None) -> list[BandMeasurement]:
+    """Measure the flux in every known band window.
+
+    This is a *measurement*, not a detection, and it exists because the
+    two are not interchangeable. :func:`find_features_multiscale` judges a
+    feature against a local baseline taken from flanking annuli, which is
+    the right thing for an isolated line but fails outright for a band
+    that is as wide as its own annulus: for the 7.7 um aromatic complex
+    the annulus lands on the 6.2 and 8.6 um bands, the baseline comes out
+    as high as the signal, and the filter reports Z ~ 2 for a band whose
+    residual is twenty times the pixel noise. Widening the filter does not
+    help -- it widens the annulus too.
+
+    Since the band positions are known in advance there is no need to
+    detect them blindly. Integrate the continuum-subtracted flux over the
+    catalogued window and ask whether it is consistent with zero. Use this
+    for solid-state and aromatic bands; use the multiscale detector for
+    lines and for anything not in the catalogue.
+
+    The uncertainty combines photon noise with a baseline term: the
+    continuum under a wide band is interpolated across a mask, so an
+    offset error ``delta`` over a window of width ``W`` contributes
+    ``delta * W`` to the integral. ``delta`` is estimated from the scatter
+    of the residual in the flanking anchor regions, which is where that
+    error is actually visible.
+
+    Parameters
+    ----------
+    max_width_frac : float
+        Skip catalogue entries wider than this fraction of their own peak
+        wavelength -- the plateaux and the featureless carbon continua,
+        which are not measurable as bands.
+    flank_frac : float
+        Width of each flanking baseline window, as a fraction of the band
+        width.
+    snr_min : float
+        Only measurements reaching this absolute significance are
+        returned. Pass 0 to get every window.
+    """
+    from .continuum import anchored_continuum
+    from .linedb import load_bands
+
+    if continuum is None:
+        continuum = anchored_continuum(spectrum, **(continuum_kwargs or {}))
+    continuum = np.asarray(continuum, dtype=float)
+    resid = spectrum.flux - continuum
+
+    if bands is None:
+        bands = load_bands()
+    if kinds is not None:
+        want = {str(k).lower() for k in np.atleast_1d(kinds)}
+        bands = bands[bands["kind"].astype(str).str.lower().isin(want)]
+
+    z = float(getattr(spectrum, "redshift", 0.0) or 0.0)
+    w = spectrum.wavelength
+    err = np.asarray(spectrum.flux_err, dtype=float)
+    good = spectrum.good & np.isfinite(resid)
+
+    out: list[BandMeasurement] = []
+    for _, row in bands.iterrows():
+        try:
+            lo, hi = float(row["lam_min_um"]), float(row["lam_max_um"])
+            peak = float(row.get("lam_peak_um"))
+        except (TypeError, ValueError, KeyError):
+            continue
+        if not (np.isfinite(lo) and np.isfinite(hi)) or hi <= lo:
+            continue
+        if not (np.isfinite(peak) and peak > 0):
+            peak = 0.5 * (lo + hi)
+        if (hi - lo) / peak > max_width_frac:
+            continue
+
+        olo, ohi, opeak = lo * (1 + z), hi * (1 + z), peak * (1 + z)
+        inside = good & (w >= olo) & (w <= ohi)
+        n = int(inside.sum())
+        if n < min_pix:
+            continue
+
+        wi, ri = w[inside], resid[inside]
+        order = np.argsort(wi)
+        wi, ri = wi[order], ri[order]
+        ei = err[inside][order]
+        ci = continuum[inside][order]
+        dl = np.gradient(wi)
+
+        flux = float(np.sum(ri * dl))
+        photon = float(np.sqrt(np.sum((np.nan_to_num(ei) * dl) ** 2)))
+
+        pad = flank_frac * (ohi - olo)
+        flank = good & (((w >= olo - pad) & (w < olo))
+                        | ((w > ohi) & (w <= ohi + pad)))
+        if flank.sum() >= 4:
+            fr = resid[flank]
+            scatter = 1.4826 * float(np.nanmedian(np.abs(fr - np.nanmedian(fr))))
+            delta = scatter / np.sqrt(max(flank.sum(), 1))
+        else:
+            delta = float(np.nanmedian(np.abs(np.nan_to_num(ei))))
+        baseline = float(delta * (ohi - olo))
+
+        ferr = float(np.hypot(photon, baseline))
+        if not np.isfinite(ferr) or ferr <= 0:
+            continue
+        snr = flux / ferr
+
+        # Smooth before taking the peak. On a wide window the single
+        # brightest pixel is a narrow line sitting on the band -- the
+        # 6-9 um plateau peaked on [Ar II] 6.99 and reported a contrast
+        # of 12 for a band whose own contrast is 3. A median filter over
+        # a few percent of the window suppresses the lines and leaves the
+        # band, which is what the number is meant to describe.
+        kw = int(np.clip(round(0.03 * ri.size), 5, max(ri.size // 3, 5)))
+        if kw % 2 == 0:
+            kw += 1
+        rs = (median_filter(ri, size=kw, mode="nearest")
+              if ri.size > kw else ri)
+        k = int(np.nanargmax(np.abs(rs)))
+        pix = float(ei[k]) if np.isfinite(ei[k]) and ei[k] > 0 else np.nan
+        peak_snr = float(rs[k] / pix) if np.isfinite(pix) else np.nan
+        denom = float(ci[k])
+        contrast = (float(rs[k] / denom)
+                    if np.isfinite(denom) and denom > 0 else np.nan)
+
+        m = BandMeasurement(
+            name=str(row.get("name", "")), species=str(row.get("species", "")),
+            kind=str(row.get("kind", "")), lo=olo, hi=ohi, peak=opeak,
+            flux=flux, flux_err=ferr, snr=snr, peak_resid=float(rs[k]),
+            peak_snr=peak_snr, contrast=contrast, n_pix=n)
+        if abs(snr) >= snr_min:
+            out.append(m)
+
+    out.sort(key=lambda m: -abs(m.snr))
+    return out
+
+
+def bands_table(measurements):
+    """:class:`~astropy.table.Table` of :func:`measure_bands` output."""
+    from astropy.table import Table
+
+    cols = ["name", "species", "kind", "lo", "hi", "peak", "flux", "flux_err",
+            "snr", "peak_resid", "peak_snr", "contrast", "n_pix"]
+    rows = [[getattr(m, c) for c in cols] for m in measurements]
+    return Table(rows=rows, names=cols) if rows else Table(names=cols)

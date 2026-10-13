@@ -157,6 +157,7 @@ Notes
 import argparse
 import glob
 import logging
+import contextlib
 import os
 import re
 import time
@@ -1076,6 +1077,73 @@ def _background_model_error(diff, src_x, src_y, fwhm, bin_size, valid=None):
     return out
 
 
+@contextlib.contextmanager
+def _abi_pool_cleanup():
+    """Make AstroBkgInterp's worker pool clean up after itself.
+
+    AstroBkgInterp.run() does ``p = Pool(self.pool_size)``, ``p.map(...)``
+    and then drops the reference without ``close()``/``join()``. CPython
+    eventually finalises the pool, but the POSIX semaphores it allocated are
+    only released by the resource tracker at interpreter shutdown, which is
+    why every run ends with
+
+        UserWarning: resource_tracker: There appear to be N leaked
+        semaphore objects to clean up at shutdown
+
+    The warning is harmless in itself -- the tracker *is* cleaning them up,
+    it is just complaining that nobody else did -- but it is noise on every
+    run, and a process that creates many pools can exhaust the system
+    semaphore limit before shutdown ever arrives.
+
+    Rather than patch the installed package, swap in a factory that wraps
+    the pool so it shuts itself down as soon as ``map`` returns. That is
+    safe precisely because AstroBkgInterp never touches the pool again
+    afterwards.
+
+    Note ``multiprocessing.Pool`` is a *bound method* of the active start
+    context, not a class, so this has to wrap by delegation -- subclassing
+    it raises ``TypeError: method expected 2 arguments, got 3``.
+    """
+    import AstroBkgInterp.AstroBkgInterp as _abi_mod
+
+    original = getattr(_abi_mod, "Pool", None)
+    if not callable(original):
+        yield
+        return
+
+    class _SelfClosingPool:
+        """Delegates everything to a real pool, but shuts it down after map."""
+
+        def __init__(self, pool):
+            self._pool = pool
+
+        def map(self, *args, **kwargs):
+            try:
+                return self._pool.map(*args, **kwargs)
+            finally:
+                self._pool.close()
+                self._pool.join()
+
+        def __getattr__(self, name):
+            return getattr(self._pool, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            self._pool.terminate()
+            return False
+
+    def _factory(*args, **kwargs):
+        return _SelfClosingPool(original(*args, **kwargs))
+
+    _abi_mod.Pool = _factory
+    try:
+        yield
+    finally:
+        _abi_mod.Pool = original
+
+
 def run_astrobkginterp_background(cube_file, src_x, src_y, out_dir, product_name,
                                    bkg_mode="polynomial", aper_rad=7, ann_width=6,
                                    fwhm_scale=2.5, poly_k=3, bin_size=9,
@@ -1161,7 +1229,8 @@ def run_astrobkginterp_background(cube_file, src_x, src_y, out_dir, product_name
         bi.cube_resolution = cube_resolution
         bi.pool_size = pool_size if pool_size is not None else max(1, (os.cpu_count() or 2) - 1)
 
-        diff, bkg, mask, err_out = bi.run(data, err=err)
+        with _abi_pool_cleanup():
+            diff, bkg, mask, err_out = bi.run(data, err=err)
 
         out_hdul = hdul.copy()
         out_hdul["SCI"].data = diff.astype(hdul["SCI"].data.dtype)

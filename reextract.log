@@ -1,0 +1,1735 @@
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.040122 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.762964 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661469762.030 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+Per-epoch positions for 4 epoch(s):
+  2025-01-17: RA=166.456476  Dec=-0.034829
+  2025-06-01: RA=166.456445  Dec=-0.034846
+  2025-12-07: RA=166.456158  Dec=-0.034929
+  2025-12-28: RA=166.456167  Dec=-0.034921
+4 MIRI-MRS epoch(s) to re-extract
+
+=== SN2024aecx_2025-01-17: cubes in MIRI-MRS/SN2024aecx_2025-01-17/stage3  [RA=166.456476 Dec=-0.034829 (from --positions)]
+12 channel/band cube(s) found in SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/stage3
+[ch1-short] using supplied sky position -> pixel (29.86, 29.68)
+  ERR: filled 22.4% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (29.863311341211784, 29.67971742882588)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:28:43,042 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.081084 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.785199 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661032563.390 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.459 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch1-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch1-short_abi_bgsub_quicklook.png)
+[ch1-short] extracted 1050/1050 finite points (4.90-5.74 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch1-short_abi_x1d.fits
+[ch1-medium] using supplied sky position -> pixel (29.35, 28.88)
+  ERR: filled 22.1% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.5 px
+Source Masking: circular
+    Center: (29.35437493890253, 28.88307865242144)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:29:25,428 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.112682 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.802347 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1660694018.465 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.384 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch1-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch1-medium_abi_bgsub_quicklook.png)
+[ch1-medium] extracted 1213/1213 finite points (5.66-6.63 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch1-medium_abi_x1d.fits
+[ch1-long] using supplied sky position -> pixel (29.28, 31.05)
+  ERR: filled 22.2% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.5-2.8 px
+Source Masking: circular
+    Center: (29.28355549559797, 31.046034928381296)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:30:12,791 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.040122 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.762964 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661469762.030 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.27 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch1-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch1-long_abi_bgsub_quicklook.png)
+[ch1-long] extracted 1400/1400 finite points (6.53-7.65 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch1-long_abi_x1d.fits
+[ch2-short] using supplied sky position -> pixel (25.39, 23.82)
+  ERR: filled 15.6% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (25.38816752839263, 23.817905554688707)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:30:42,790 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.081084 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.785199 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661032563.390 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.331 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch2-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch2-short_abi_bgsub_quicklook.png)
+[ch2-short] extracted 970/970 finite points (7.51-8.77 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch2-short_abi_x1d.fits
+[ch2-medium] using supplied sky position -> pixel (26.89, 22.05)
+  ERR: filled 20.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (26.894461135985274, 22.054670466168652)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:31:19,457 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.112682 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.802347 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1660694018.465 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.226 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch2-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch2-medium_abi_bgsub_quicklook.png)
+[ch2-medium] extracted 1124/1124 finite points (8.67-10.13 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch2-medium_abi_x1d.fits
+[ch2-long] using supplied sky position -> pixel (24.84, 22.50)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-2.9 px
+Source Masking: circular
+    Center: (24.839638124702883, 22.499329228034615)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:31:56,823 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.040158 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.762984 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661469377.398 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.199 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch2-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch2-long_abi_bgsub_quicklook.png)
+[ch2-long] extracted 1300/1300 finite points (10.01-11.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch2-long_abi_x1d.fits
+[ch3-short] using supplied sky position -> pixel (29.62, 25.13)
+  ERR: filled 15.7% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.4-2.8 px
+Source Masking: circular
+    Center: (29.616613847591378, 25.129035660819792)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:32:25,680 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.081120 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.785218 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661032175.657 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.187 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch3-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch3-short_abi_bgsub_quicklook.png)
+[ch3-short] extracted 769/769 finite points (11.55-13.47 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch3-short_abi_x1d.fits
+[ch3-medium] using supplied sky position -> pixel (29.74, 23.99)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.7-3.1 px
+Source Masking: circular
+    Center: (29.735130557397625, 23.986499285607053)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:32:57,867 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.123511 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.808223 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1660577734.530 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.163 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch3-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch3-medium_abi_bgsub_quicklook.png)
+[ch3-medium] extracted 892/892 finite points (13.34-15.57 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch3-medium_abi_x1d.fits
+[ch3-long] using supplied sky position -> pixel (29.13, 24.14)
+  ERR: filled 16.7% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 8-9 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 3.1-3.5 px
+Source Masking: circular
+    Center: (29.12564652393652, 24.140055729872525)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:33:33,013 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.040158 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.762984 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661469377.398 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.202 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch3-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch3-long_abi_bgsub_quicklook.png)
+[ch3-long] extracted 1028/1028 finite points (15.41-17.98 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch3-long_abi_x1d.fits
+[ch4-short] using supplied sky position -> pixel (16.05, 15.85)
+  ERR: filled 22.4% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 5-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.0-2.3 px
+Source Masking: circular
+    Center: (16.048056680455588, 15.849879997449335)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:33:49,524 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.081120 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.785218 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1661032175.657 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.522 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch4-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch4-short_abi_bgsub_quicklook.png)
+[ch4-short] extracted 542/542 finite points (17.70-20.95 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch4-short_abi_x1d.fits
+[ch4-medium] using supplied sky position -> pixel (16.12, 16.15)
+  ERR: filled 22.6% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (16.117713928280047, 16.1454889031216)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:34:07,289 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    95.123511 from OBSGEO-[XYZ].
+Set OBSGEO-B to    12.808223 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1660577734.530 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 1.15 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch4-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch4-medium_abi_bgsub_quicklook.png)
+[ch4-medium] extracted 632/632 finite points (20.69-24.48 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch4-medium_abi_x1d.fits
+[ch4-long] using supplied sky position -> pixel (16.15, 16.00)
+  ERR: filled 23.9% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-3.0 px
+Source Masking: circular
+    Center: (16.145688215773564, 15.997345016280647)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:34:25,879 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.422405 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.816190 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721534681.775 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 4.08 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch4-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-01-17_ch4-long_abi_bgsub_quicklook.png)
+[ch4-long] extracted 717/717 finite points (24.40-28.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_ch4-long_abi_x1d.fits
+
+Combining 12 channel/band spectra into one final spectrum...
+  remaining step(s) in the combined spectrum -- check these before using it:
+    24.310 um  x-0.50  S/N=-9.2
+    25.610 um  x-0.12  S/N=+8.7
+  Stitch report
+  ============================================================
+  anchor: ['ch1-long', 'ch4-short', 'ch4-long']
+
+  WARNING: 3 disconnected calibration groups -- their relative flux scales are NOT tied by data:
+      ['ch1-short', 'ch1-medium', 'ch1-long', 'ch2-short', 'ch2-medium', 'ch2-long', 'ch3-short', 'ch3-medium', 'ch3-long']
+      ['ch4-short', 'ch4-medium']
+      ['ch4-long']
+
+  segment                                  scale       +/-
+  ch1-short                               1.1117    0.0137
+  ch1-medium                              0.9716    0.0064
+  ch1-long                                1.0000    0.0010
+  ch2-short                               1.1148    0.0075
+  ch2-medium                              1.0903    0.0104
+  ch2-long                                1.0375    0.0134
+  ch3-short                               1.0760    0.0176
+  ch3-medium                              1.0680    0.0288
+  ch3-long                                0.9830    0.0321
+  ch4-short                               1.0000    0.0010
+  ch4-medium                              1.0169    0.1445
+  ch4-long                                1.0000    0.0000
+
+  segment                               med S/N  chi2/dof    +ve   verdict
+  ch1-short                              119.48    2391.0   100%   ok
+  ch1-medium                             158.73    9167.3   100%   ok
+  ch1-long                               183.75   15537.2   100%   ok
+  ch2-short                              119.36    5520.6   100%   ok
+  ch2-medium                             121.83    5790.5   100%   ok
+  ch2-long                               130.91   11261.4   100%   ok
+  ch3-short                               84.01    2330.3   100%   ok
+  ch3-medium                              56.33     839.8   100%   ok
+  ch3-long                                36.78    2043.8   100%   ok
+  ch4-short                               13.58     101.0   100%   ok
+  ch4-medium                               2.50      56.2    73%   ok
+  ch4-long                                 0.42     260.4    54%   ok
+
+  join                                          kind         ratio  used   residual
+  ch1-short | ch1-medium                        overlap     0.8739   yes     +2.5% (5.1s) residual calibration step
+      note: ratio is wavelength dependent (+3.700+/-0.235 dex/um); a single scale factor cannot fully match this join
+  ch1-medium | ch1-long                         overlap     1.0293   yes    +13.2% (18.3s) step significant but spectrum is locally curved here (likely real structure)
+  ch1-long | ch2-short                          overlap     1.1148   yes    -13.0% (16.7s) step significant but spectrum is locally curved here (likely real structure)
+      note: ratio is wavelength dependent (-0.715+/-0.135 dex/um); a single scale factor cannot fully match this join
+  ch2-short | ch2-medium                        overlap     0.9780   yes     +2.0% (3.9s) step significant but spectrum is locally curved here (likely real structure)
+  ch2-medium | ch2-long                         overlap     0.9516   yes     -0.8% (1.6s) continuous
+  ch2-long | ch3-short                          overlap     1.0371   yes     +3.0% (4.7s) residual calibration step
+      note: ratio is wavelength dependent (-0.699+/-0.216 dex/um); a single scale factor cannot fully match this join
+  ch3-short | ch3-medium                        overlap     0.9926   yes     +0.6% (0.6s) continuous
+  ch3-medium | ch3-long                         overlap     0.9204   yes     +5.7% (4.5s) step significant but spectrum is locally curved here (likely real structure)
+  ch3-long | ch4-short                          overlap     0.4959    NO     +4.3% (1.3s) continuous
+      reason: ratio 0.496 outside [0.500, 2.000]
+  ch4-short | ch4-medium                        overlap     1.0169   yes     -5.7% (0.4s) continuous
+  ch4-medium | ch4-long                         overlap        n/a    NO   -200.0% (5.2s) residual calibration step
+      reason: overlap S/N too low (blue=1.73, red=4.87, need >=3)
+  ! the usable-overlap graph is disconnected: ch1-short,ch1-medium,ch1-
+    long,ch2-short,ch2-medium,ch2-long,ch3-short,ch3-medium,ch3-long |
+    ch4-short,ch4-medium | ch4-long. Segments in different groups are NOT
+    cross-calibrated against each other; the flux step between groups is
+    whatever the data happened to have. Fix this upstream (recover the
+    overlap, or supply an external photometric tie) rather than by forcing a
+    scale here.
+  ! ch1-short|ch1-medium still steps by +2.5% (5.1 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch2-long|ch3-short still steps by +3.0% (4.7 sigma) after stitching; the
+    scale was applied but a single factor did not fully match the join --
+    check the tilt note above, this usually means the mismatch is wavelength
+    dependent (aperture-correction or residual-background shape) rather than
+    a flat offset
+  ! ch4-medium|ch4-long still steps by -200.0% (5.2 sigma) after stitching;
+    the measured ratio was rejected, so no correction was applied (overlap
+    S/N too low (blue=1.73, red=4.87, need >=3))
+Saved combined spectrum to SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_abi_combined.fits / .ecsv
+
+Final combined spectrum: SN2024aecx/MIRI-MRS/SN2024aecx_2025-01-17/reextract/SN2024aecx_2025-01-17_abi_combined.fits / .ecsv
+  recorded in products.csv: MIRI-MRS SN2024aecx_2025-01-17 abi_combined
+=== SN2024aecx_2025-06-01: cubes in MIRI-MRS/SN2024aecx_2025-06-01/stage3  [RA=166.456445 Dec=-0.034846 (from --positions)]
+12 channel/band cube(s) found in SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/stage3
+[ch1-short] using supplied sky position -> pixel (22.89, 21.39)
+  ERR: filled 22.5% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (22.88694294773658, 21.394537485778375)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:35:04,302 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.394816 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.847463 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721945177.912 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.465 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch1-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch1-short_abi_bgsub_quicklook.png)
+[ch1-short] extracted 1050/1050 finite points (4.90-5.74 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch1-short_abi_x1d.fits
+[ch1-medium] using supplied sky position -> pixel (22.37, 20.59)
+  ERR: filled 22.1% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.5 px
+Source Masking: circular
+    Center: (22.37151572156253, 20.593567814815604)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:35:46,784 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.382006 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.861957 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1722136394.803 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.398 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch1-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch1-medium_abi_bgsub_quicklook.png)
+[ch1-medium] extracted 1213/1213 finite points (5.66-6.63 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch1-medium_abi_x1d.fits
+[ch1-long] using supplied sky position -> pixel (22.29, 22.75)
+  ERR: filled 22.3% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.5-2.8 px
+Source Masking: circular
+    Center: (22.289011740894335, 22.75234058196532)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:36:34,489 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.422405 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.816190 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721534681.775 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.294 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch1-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch1-long_abi_bgsub_quicklook.png)
+[ch1-long] extracted 1400/1400 finite points (6.53-7.65 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch1-long_abi_x1d.fits
+[ch2-short] using supplied sky position -> pixel (20.07, 17.45)
+  ERR: filled 15.7% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (20.069161149612867, 17.451854666234365)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:37:04,612 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.394816 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.847463 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721945177.912 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.343 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch2-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch2-short_abi_bgsub_quicklook.png)
+[ch2-short] extracted 970/970 finite points (7.51-8.77 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch2-short_abi_x1d.fits
+[ch2-medium] using supplied sky position -> pixel (21.55, 15.71)
+  ERR: filled 20.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (21.554680527271206, 15.712946857209559)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:37:38,801 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.382006 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.861957 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1722136394.803 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.243 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch2-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch2-medium_abi_bgsub_quicklook.png)
+[ch2-medium] extracted 1124/1124 finite points (8.67-10.13 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch2-medium_abi_x1d.fits
+[ch2-long] using supplied sky position -> pixel (19.51, 16.15)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-2.9 px
+Source Masking: circular
+    Center: (19.514077967720926, 16.14994118116449)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:38:14,601 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.412047 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.827940 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721688577.076 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.223 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch2-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch2-long_abi_bgsub_quicklook.png)
+[ch2-long] extracted 1300/1300 finite points (10.01-11.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch2-long_abi_x1d.fits
+[ch3-short] using supplied sky position -> pixel (25.12, 19.66)
+  ERR: filled 15.8% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.4-2.8 px
+Source Masking: circular
+    Center: (25.118405001912762, 19.663044474709057)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:38:43,115 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.399023 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.842699 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721882462.217 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.196 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch3-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch3-short_abi_bgsub_quicklook.png)
+[ch3-short] extracted 769/769 finite points (11.55-13.47 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch3-short_abi_x1d.fits
+[ch3-medium] using supplied sky position -> pixel (25.26, 18.52)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.7-3.1 px
+Source Masking: circular
+    Center: (25.259640473323422, 18.51746322772371)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:39:14,055 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.388633 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.854462 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1722037435.291 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.169 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch3-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch3-medium_abi_bgsub_quicklook.png)
+[ch3-medium] extracted 892/892 finite points (13.34-15.57 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch3-medium_abi_x1d.fits
+[ch3-long] using supplied sky position -> pixel (24.65, 18.67)
+  ERR: filled 16.8% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 8-9 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 3.1-3.5 px
+Source Masking: circular
+    Center: (24.64673040028534, 18.674969506166086)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:39:48,051 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.412047 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.827940 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721688577.076 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.214 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch3-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch3-long_abi_bgsub_quicklook.png)
+[ch3-long] extracted 1028/1028 finite points (15.41-17.98 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch3-long_abi_x1d.fits
+[ch4-short] using supplied sky position -> pixel (13.45, 12.78)
+  ERR: filled 22.5% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 5-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.0-2.3 px
+Source Masking: circular
+    Center: (13.451380059406816, 12.776541569960992)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:40:03,937 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.399023 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.842699 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1721882462.217 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.568 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch4-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch4-short_abi_bgsub_quicklook.png)
+[ch4-short] extracted 542/542 finite points (17.70-20.95 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch4-short_abi_x1d.fits
+[ch4-medium] using supplied sky position -> pixel (13.50, 13.07)
+  ERR: filled 22.6% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (13.502207959725421, 13.073744506453313)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:40:21,371 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to   -95.388633 from OBSGEO-[XYZ].
+Set OBSGEO-B to   -33.854462 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1722037435.291 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 1.2 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch4-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch4-medium_abi_bgsub_quicklook.png)
+[ch4-medium] extracted 632/632 finite points (20.69-24.48 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch4-medium_abi_x1d.fits
+[ch4-long] using supplied sky position -> pixel (13.56, 12.95)
+  ERR: filled 24.3% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-3.0 px
+Source Masking: circular
+    Center: (13.56135972397994, 12.950550620485034)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:40:39,561 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.326589 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.733917 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695823304.420 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 4.66 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch4-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-06-01_ch4-long_abi_bgsub_quicklook.png)
+[ch4-long] extracted 717/717 finite points (24.40-28.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_ch4-long_abi_x1d.fits
+
+Combining 12 channel/band spectra into one final spectrum...
+  Stitch report
+  ============================================================
+  anchor: ch1-long
+
+  segment                                  scale       +/-
+  ch1-short                               1.0169    0.0035
+  ch1-medium                              1.0132    0.0024
+  ch1-long                                1.0000    0.0010
+  ch2-short                               0.9852    0.0025
+  ch2-medium                              0.9727    0.0040
+  ch2-long                                0.9539    0.0044
+  ch3-short                               0.9650    0.0054
+  ch3-medium                              0.9636    0.0073
+  ch3-long                                0.9599    0.0085
+  ch4-short                               0.9025    0.0089
+  ch4-medium                              0.8774    0.0243
+  ch4-long                                1.0142    0.0866
+
+  segment                               med S/N  chi2/dof    +ve   verdict
+  ch1-short                              284.01   24746.0   100%   ok
+  ch1-medium                             397.23   46348.4   100%   ok
+  ch1-long                               574.41   13310.9   100%   ok
+  ch2-short                              387.04    1757.2   100%   ok
+  ch2-medium                             495.08     939.0   100%   ok
+  ch2-long                               587.32   17613.4   100%   ok
+  ch3-short                              450.86   34107.6   100%   ok
+  ch3-medium                             425.97    9617.7   100%   ok
+  ch3-long                               312.45   13723.3   100%   ok
+  ch4-short                               78.87     754.1   100%   ok
+  ch4-medium                              35.92     299.5   100%   ok
+  ch4-long                                12.57     233.3    91%   ok
+
+  join                                          kind         ratio  used   residual
+  ch1-short | ch1-medium                        overlap     0.9964   yes     -0.5% (3.4s) residual calibration step
+  ch1-medium | ch1-long                         overlap     0.9870   yes     +9.8% (42.7s) step significant but spectrum is locally curved here (likely real structure)
+  ch1-long | ch2-short                          overlap     0.9852   yes     -1.8% (9.0s) step significant but spectrum is locally curved here (likely real structure)
+  ch2-short | ch2-medium                        overlap     0.9873   yes     -0.1% (0.4s) continuous
+  ch2-medium | ch2-long                         overlap     0.9807   yes     -0.7% (3.2s) residual calibration step
+  ch2-long | ch3-short                          overlap     1.0116   yes     +0.2% (0.6s) continuous
+  ch3-short | ch3-medium                        overlap     0.9986   yes     -0.6% (2.1s) step significant but spectrum is locally curved here (likely real structure)
+      note: ratio is wavelength dependent (-0.628+/-0.207 dex/um); a single scale factor cannot fully match this join
+  ch3-medium | ch3-long                         overlap     0.9962   yes     +0.5% (2.0s) step significant but spectrum is locally curved here (likely real structure)
+  ch3-long | ch4-short                          overlap     0.9402   yes     +2.5% (5.4s) step significant but spectrum is locally curved here (likely real structure)
+  ch4-short | ch4-medium                        overlap     0.9722   yes     -5.5% (4.0s) residual calibration step
+      note: ratio is wavelength dependent (-1.684+/-0.405 dex/um); a single scale factor cannot fully match this join
+  ch4-medium | ch4-long                         overlap     1.1559   yes     -5.2% (0.8s) continuous
+  ! ch1-short|ch1-medium still steps by -0.5% (3.4 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch2-medium|ch2-long still steps by -0.7% (3.2 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch4-short|ch4-medium still steps by -5.5% (4.0 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+Saved combined spectrum to SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_abi_combined.fits / .ecsv
+
+Final combined spectrum: SN2024aecx/MIRI-MRS/SN2024aecx_2025-06-01/reextract/SN2024aecx_2025-06-01_abi_combined.fits / .ecsv
+  recorded in products.csv: MIRI-MRS SN2024aecx_2025-06-01 abi_combined
+=== SN2024aecx_2025-12-07: cubes in MIRI-MRS/SN2024aecx_2025-12-07/stage3  [RA=166.456158 Dec=-0.034929 (from --positions)]
+12 channel/band cube(s) found in SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/stage3
+[ch1-short] using supplied sky position -> pixel (17.36, 13.52)
+  ERR: filled 22.4% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (17.35848307690579, 13.520949247623996)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:41:16,901 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.350834 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.714743 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695861268.152 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.412 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch1-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch1-short_abi_bgsub_quicklook.png)
+[ch1-short] extracted 1050/1050 finite points (4.90-5.74 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch1-short_abi_x1d.fits
+[ch1-medium] using supplied sky position -> pixel (16.86, 12.71)
+  ERR: filled 22.1% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.5 px
+Source Masking: circular
+    Center: (16.858436987102685, 12.712702998964815)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:41:58,881 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.367727 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.701345 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695883934.104 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.351 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch1-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch1-medium_abi_bgsub_quicklook.png)
+[ch1-medium] extracted 1213/1213 finite points (5.66-6.63 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch1-medium_abi_x1d.fits
+[ch1-long] using supplied sky position -> pixel (16.78, 14.88)
+  ERR: filled 22.2% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.5-2.8 px
+Source Masking: circular
+    Center: (16.777517681829313, 14.880531767397107)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:42:45,602 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.326589 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.733917 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695823304.420 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.272 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch1-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch1-long_abi_bgsub_quicklook.png)
+[ch1-long] extracted 1400/1400 finite points (6.53-7.65 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch1-long_abi_x1d.fits
+[ch2-short] using supplied sky position -> pixel (15.87, 11.41)
+  ERR: filled 15.7% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (15.869970480428442, 11.411476804111082)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:43:14,629 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.350834 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.714743 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695861268.152 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.329 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch2-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch2-short_abi_bgsub_quicklook.png)
+[ch2-short] extracted 970/970 finite points (7.51-8.77 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch2-short_abi_x1d.fits
+[ch2-medium] using supplied sky position -> pixel (17.35, 9.68)
+  ERR: filled 20.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (17.348034988793337, 9.679681543783266)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:43:48,583 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.367727 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.701345 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695883934.104 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.221 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch2-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch2-medium_abi_bgsub_quicklook.png)
+[ch2-medium] extracted 1124/1124 finite points (8.67-10.13 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch2-medium_abi_x1d.fits
+[ch2-long] using supplied sky position -> pixel (15.31, 10.12)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-2.9 px
+Source Masking: circular
+    Center: (15.312492151436892, 10.119888514669)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:44:24,620 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.329642 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.731505 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695828436.226 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.206 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch2-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch2-long_abi_bgsub_quicklook.png)
+[ch2-long] extracted 1300/1300 finite points (10.01-11.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch2-long_abi_x1d.fits
+[ch3-short] using supplied sky position -> pixel (21.61, 14.49)
+  ERR: filled 15.9% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.4-2.8 px
+Source Masking: circular
+    Center: (21.60880038650231, 14.490181344515698)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:44:53,716 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.350861 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.714721 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695861307.690 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.211 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch3-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch3-short_abi_bgsub_quicklook.png)
+[ch3-short] extracted 769/769 finite points (11.55-13.47 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch3-short_abi_x1d.fits
+[ch3-medium] using supplied sky position -> pixel (21.74, 13.35)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.7-3.1 px
+Source Masking: circular
+    Center: (21.743041214360886, 13.3503262778833)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:45:24,528 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.373460 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.696792 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695890912.790 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.172 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch3-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch3-medium_abi_bgsub_quicklook.png)
+[ch3-medium] extracted 892/892 finite points (13.34-15.57 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch3-medium_abi_x1d.fits
+[ch3-long] using supplied sky position -> pixel (21.13, 13.52)
+  ERR: filled 16.8% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 8-9 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 3.1-3.5 px
+Source Masking: circular
+    Center: (21.126897572482914, 13.515846131822482)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:45:58,248 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.329642 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.731505 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695828436.226 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.21 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch3-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch3-long_abi_bgsub_quicklook.png)
+[ch3-long] extracted 1028/1028 finite points (15.41-17.98 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch3-long_abi_x1d.fits
+[ch4-short] using supplied sky position -> pixel (11.40, 9.85)
+  ERR: filled 22.5% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 5-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.0-2.3 px
+Source Masking: circular
+    Center: (11.40436036708465, 9.847084396219216)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:46:13,796 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.350861 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.714721 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695861307.690 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.579 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch4-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch4-short_abi_bgsub_quicklook.png)
+[ch4-short] extracted 542/542 finite points (17.70-20.95 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch4-short_abi_x1d.fits
+[ch4-medium] using supplied sky position -> pixel (11.46, 10.14)
+  ERR: filled 22.6% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (11.459730337307207, 10.143004624581431)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:46:30,267 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    84.373460 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.696792 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1695890912.790 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 1.17 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch4-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch4-medium_abi_bgsub_quicklook.png)
+[ch4-medium] extracted 632/632 finite points (20.69-24.48 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch4-medium_abi_x1d.fits
+[ch4-long] using supplied sky position -> pixel (11.52, 10.02)
+  ERR: filled 24.1% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-3.0 px
+Source Masking: circular
+    Center: (11.523967080145589, 10.01736059736284)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:46:48,079 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.219307 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.336206 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691701963.490 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 4.24 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch4-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-07_ch4-long_abi_bgsub_quicklook.png)
+[ch4-long] extracted 717/717 finite points (24.40-28.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_ch4-long_abi_x1d.fits
+
+Combining 12 channel/band spectra into one final spectrum...
+  remaining step(s) in the combined spectrum -- check these before using it:
+    16.250 um  x2.76  S/N=+45.1
+    11.450 um  x0.43  S/N=-20.5
+    18.140 um  x1.59  S/N=+13.8
+    24.730 um  x1.41  S/N=+8.7
+  Stitch report
+  ============================================================
+  anchor: ['ch1-long', 'ch2-long', 'ch3-long']
+
+  WARNING: 3 disconnected calibration groups -- their relative flux scales are NOT tied by data:
+      ['ch1-short', 'ch1-medium', 'ch1-long', 'ch2-short', 'ch2-medium']
+      ['ch2-long']
+      ['ch3-short', 'ch3-medium', 'ch3-long', 'ch4-short', 'ch4-medium', 'ch4-long']
+
+  segment                                  scale       +/-
+  ch1-short                               0.9664    0.1432
+  ch1-medium                              0.9888    0.0691
+  ch1-long                                1.0000    0.0010
+  ch2-short                               1.1926    0.0287
+  ch2-medium                              1.0038    0.0854
+  ch2-long                                1.0000    0.0000
+  ch3-short                               1.1200    0.1929
+  ch3-medium                              1.2275    0.0869
+  ch3-long                                1.0000    0.0010
+  ch4-short                               1.0389    0.0383
+  ch4-medium                              0.8681    0.0803
+  ch4-long                                0.7186    0.1175
+
+  segment                               med S/N  chi2/dof    +ve   verdict
+  ch1-short                                5.03      33.3    98%   ok
+  ch1-medium                               9.65    1306.8   100%   ok
+  ch1-long                                18.89    4557.7   100%   ok
+  ch2-short                               15.23    1222.4   100%   ok
+  ch2-medium                               4.08     861.8    78%   ok
+  ch2-long                                 6.24   17827.1    80%   ok
+  ch3-short                                8.94    1089.9    89%   ok
+  ch3-medium                              12.48     749.5    98%   ok
+  ch3-long                                36.37   13360.7   100%   ok
+  ch4-short                               16.56     361.7   100%   ok
+  ch4-medium                              15.65     887.6   100%   ok
+  ch4-long                                11.28     778.9    97%   ok
+
+  join                                          kind         ratio  used   residual
+  ch1-short | ch1-medium                        overlap     1.0232   yes    +18.0% (3.0s) residual calibration step
+  ch1-medium | ch1-long                         overlap     1.0113   yes    -28.6% (5.9s) step significant but spectrum is locally curved here (likely real structure)
+      note: ratio is wavelength dependent (+8.195+/-2.144 dex/um); a single scale factor cannot fully match this join
+  ch1-long | ch2-short                          overlap     1.1926   yes    +12.4% (6.7s) residual calibration step
+      note: ratio is wavelength dependent (+2.708+/-0.441 dex/um); a single scale factor cannot fully match this join
+  ch2-short | ch2-medium                        overlap     0.8417   yes    -10.0% (1.7s) continuous
+  ch2-medium | ch2-long                         overlap        n/a    NO     -6.4% (0.2s) continuous
+      reason: overlap S/N too low (blue=2.47, red=4.97, need >=3)
+  ch2-long | ch3-short                          overlap     2.8873    NO    -42.9% (7.4s) step significant but spectrum is locally curved here (likely real structure)
+      reason: ratio 2.887 outside [0.500, 2.000]
+  ch3-short | ch3-medium                        overlap     1.0960   yes     +5.5% (0.5s) continuous
+  ch3-medium | ch3-long                         overlap     0.8147   yes    +12.3% (1.8s) continuous
+      note: ratio is wavelength dependent (-6.715+/-1.978 dex/um); a single scale factor cannot fully match this join
+  ch3-long | ch4-short                          overlap     1.0389   yes    -26.9% (6.0s) step significant but spectrum is locally curved here (likely real structure)
+  ch4-short | ch4-medium                        overlap     0.8356   yes    -22.1% (3.6s) step significant but spectrum is locally curved here (likely real structure)
+  ch4-medium | ch4-long                         overlap     0.8278   yes    -13.5% (1.8s) continuous
+  ! the usable-overlap graph is disconnected:
+    ch1-short,ch1-medium,ch1-long,ch2-short,ch2-medium | ch2-long |
+    ch3-short,ch3-medium,ch3-long,ch4-short,ch4-medium,ch4-long. Segments in
+    different groups are NOT cross-calibrated against each other; the flux
+    step between groups is whatever the data happened to have. Fix this
+    upstream (recover the overlap, or supply an external photometric tie)
+    rather than by forcing a scale here.
+  ! ch1-short|ch1-medium still steps by +18.0% (3.0 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch1-long|ch2-short still steps by +12.4% (6.7 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+Saved combined spectrum to SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_abi_combined.fits / .ecsv
+
+Final combined spectrum: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-07/reextract/SN2024aecx_2025-12-07_abi_combined.fits / .ecsv
+  recorded in products.csv: MIRI-MRS SN2024aecx_2025-12-07 abi_combined
+=== SN2024aecx_2025-12-28: cubes in MIRI-MRS/SN2024aecx_2025-12-28/stage3  [RA=166.456167 Dec=-0.034921 (from --positions)]
+12 channel/band cube(s) found in SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/stage3
+[ch1-short] using supplied sky position -> pixel (17.46, 13.81)
+  ERR: filled 21.8% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (17.45790000425141, 13.813780353912303)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:47:24,545 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.203234 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.324621 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691693239.669 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.403 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch1-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch1-short_abi_bgsub_quicklook.png)
+[ch1-short] extracted 1050/1050 finite points (4.90-5.74 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch1-short_abi_x1d.fits
+[ch1-medium] using supplied sky position -> pixel (16.97, 13.00)
+  ERR: filled 22.1% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.5 px
+Source Masking: circular
+    Center: (16.966984611839173, 13.000421666160758)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:48:04,522 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.198448 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.321165 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691690217.737 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.355 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch1-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch1-medium_abi_bgsub_quicklook.png)
+[ch1-medium] extracted 1213/1213 finite points (5.66-6.63 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch1-medium_abi_x1d.fits
+[ch1-long] using supplied sky position -> pixel (16.91, 15.15)
+  ERR: filled 22.3% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.5-2.8 px
+Source Masking: circular
+    Center: (16.905302424539304, 15.152509038851512)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:48:50,864 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.219307 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.336206 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691701963.490 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.273 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch1-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch1-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch1-long_abi_bgsub_quicklook.png)
+[ch1-long] extracted 1400/1400 finite points (6.53-7.65 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch1-long_abi_x1d.fits
+[ch2-short] using supplied sky position -> pixel (15.95, 11.64)
+  ERR: filled 15.7% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.1-2.3 px
+Source Masking: circular
+    Center: (15.950467539818085, 11.638532792379383)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:49:19,082 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.203234 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.324621 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691693239.669 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.314 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch2-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch2-short_abi_bgsub_quicklook.png)
+[ch2-short] extracted 970/970 finite points (7.51-8.77 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch2-short_abi_x1d.fits
+[ch2-medium] using supplied sky position -> pixel (17.43, 9.90)
+  ERR: filled 20.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (17.43449008545415, 9.898113814093785)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:49:51,614 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.198448 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.321165 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691690217.737 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.217 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch2-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch2-medium_abi_bgsub_quicklook.png)
+[ch2-medium] extracted 1124/1124 finite points (8.67-10.13 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch2-medium_abi_x1d.fits
+[ch2-long] using supplied sky position -> pixel (15.41, 10.33)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-2.9 px
+Source Masking: circular
+    Center: (15.406028614532548, 10.326241293277404)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:50:26,182 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.219280 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.336186 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691701950.670 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.2 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch2-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch2-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch2-long_abi_bgsub_quicklook.png)
+[ch2-long] extracted 1300/1300 finite points (10.01-11.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch2-long_abi_x1d.fits
+[ch3-short] using supplied sky position -> pixel (21.70, 14.68)
+  ERR: filled 15.8% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.4-2.8 px
+Source Masking: circular
+    Center: (21.703188936587377, 14.678584911079184)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:50:53,173 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.203207 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.324602 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691693223.315 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.19 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch3-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch3-short_abi_bgsub_quicklook.png)
+[ch3-short] extracted 769/769 finite points (11.55-13.47 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch3-short_abi_x1d.fits
+[ch3-medium] using supplied sky position -> pixel (21.81, 13.55)
+  ERR: filled 16.0% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.7-3.1 px
+Source Masking: circular
+    Center: (21.813108940474574, 13.548122321773299)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:51:22,916 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.198461 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.321175 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691690226.357 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.164 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch3-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch3-medium_abi_bgsub_quicklook.png)
+[ch3-medium] extracted 892/892 finite points (13.34-15.57 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch3-medium_abi_x1d.fits
+[ch3-long] using supplied sky position -> pixel (21.21, 13.70)
+  ERR: filled 16.9% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 8-9 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 3.1-3.5 px
+Source Masking: circular
+    Center: (21.206427376354803, 13.7019322241215)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:51:56,105 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.219280 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.336186 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691701950.670 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.21 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch3-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch3-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch3-long_abi_bgsub_quicklook.png)
+[ch3-long] extracted 1028/1028 finite points (15.41-17.98 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch3-long_abi_x1d.fits
+[ch4-short] using supplied sky position -> pixel (11.45, 9.95)
+  ERR: filled 22.4% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 5-6 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.0-2.3 px
+Source Masking: circular
+    Center: (11.446299170691496, 9.952288212964156)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:52:11,979 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.203207 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.324602 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691693223.315 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 0.537 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-short] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch4-short_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch4-short_abi_bgsub_quicklook.png)
+[ch4-short] extracted 542/542 finite points (17.70-20.95 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch4-short_abi_x1d.fits
+[ch4-medium] using supplied sky position -> pixel (11.51, 10.25)
+  ERR: filled 22.6% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 6-7 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.3-2.6 px
+Source Masking: circular
+    Center: (11.511203101941666, 10.245893150017904)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:52:28,539 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+WARNING: FITSFixedWarning: 'obsfix' made the change 'Set OBSGEO-L to    86.198461 from OBSGEO-[XYZ].
+Set OBSGEO-B to    11.321175 from OBSGEO-[XYZ].
+Set OBSGEO-H to 1691690226.357 from OBSGEO-[XYZ]'. [astropy.wcs.wcs]
+  ERR: background-model term adds a median 1.15 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-medium] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch4-medium_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch4-medium_abi_bgsub_quicklook.png)
+[ch4-medium] extracted 632/632 finite points (20.69-24.48 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch4-medium_abi_x1d.fits
+[ch4-long] using supplied sky position -> pixel (11.57, 10.10)
+  ERR: filled 24.1% non-finite/non-positive uncertainties before background fitting (restored to NaN afterwards).
+  Source mask radius: 7-8 px (fwhm_scale=2.5, min_aper_rad=5.0); PSF FWHM 2.6-3.0 px
+Source Masking: circular
+    Center: (11.570525697525454, 10.10080136585161)
+    Aperture radius: 7
+    FWHM scaling: True
+    Scaling factor: 2.5
+    Annulus width: 6
+Background Mode: polynomial
+    combine_fits: False
+    polynomial order: 3
+    bin size: 9
+    cube_resolution: high
+
+    Is cube: False
+    Convolution kernel: None
+Multiprocessing: True
+    pool_size: 17
+
+Uncertainties: True
+
+2026-10-12 12:52:45,995 - jwst.residual_fringe.utils - WARNING - No good data. Skipping correction.
+  ERR: background-model term adds a median 4.46 in quadrature (AstroBkgInterp's own term ignored -- see docstring).
+[ch4-long] background-subtracted cube: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch4-long_abi_bgsub_s3d.fits (QA plot: SN2024aecx_2025-12-28_ch4-long_abi_bgsub_quicklook.png)
+[ch4-long] extracted 717/717 finite points (24.40-28.70 um) -> SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_ch4-long_abi_x1d.fits
+
+Combining 12 channel/band spectra into one final spectrum...
+  remaining step(s) in the combined spectrum -- check these before using it:
+    16.260 um  x2.15  S/N=+34.2
+    18.140 um  x1.48  S/N=+16.5
+    24.510 um  x0.62  S/N=-9.4
+    22.300 um  x1.54  S/N=+8.1
+  Stitch report
+  ============================================================
+  anchor: ['ch1-long', 'ch3-long']
+
+  WARNING: 2 disconnected calibration groups -- their relative flux scales are NOT tied by data:
+      ['ch1-short', 'ch1-medium', 'ch1-long', 'ch2-short', 'ch2-medium']
+      ['ch2-long', 'ch3-short', 'ch3-medium', 'ch3-long', 'ch4-short', 'ch4-medium', 'ch4-long']
+
+  segment                                  scale       +/-
+  ch1-short                               0.8532    0.1217
+  ch1-medium                              0.9482    0.0695
+  ch1-long                                1.0000    0.0010
+  ch2-short                               1.3019    0.0259
+  ch2-medium                              1.1670    0.1038
+  ch2-long                                0.4953    0.0571
+  ch3-short                               0.9580    0.0893
+  ch3-medium                              0.9815    0.0311
+  ch3-long                                1.0000    0.0010
+  ch4-short                               0.9969    0.0287
+  ch4-medium                              0.7525    0.0596
+  ch4-long                                0.4301    0.1119
+
+  segment                               med S/N  chi2/dof    +ve   verdict
+  ch1-short                                5.25      52.6    99%   ok
+  ch1-medium                              10.36    1460.8   100%   ok
+  ch1-long                                19.54    5525.8   100%   ok
+  ch2-short                               15.91    1249.6   100%   ok
+  ch2-medium                               5.36     749.9    86%   ok
+  ch2-long                                 5.21   16348.0    73%   ok
+  ch3-short                               15.18     704.3   100%   ok
+  ch3-medium                              27.01    2140.8   100%   ok
+  ch3-long                                40.84   12564.0   100%   ok
+  ch4-short                               16.86     284.7   100%   ok
+  ch4-medium                              15.85     938.9   100%   ok
+  ch4-long                                11.17     551.5    95%   ok
+
+  join                                          kind         ratio  used   residual
+  ch1-short | ch1-medium                        overlap     1.1114   yes     -0.6% (0.1s) continuous
+  ch1-medium | ch1-long                         overlap     1.0546   yes    -46.2% (9.8s) residual calibration step
+  ch1-long | ch2-short                          overlap     1.3019   yes    +11.9% (7.2s) residual calibration step
+      note: ratio is wavelength dependent (+1.554+/-0.408 dex/um); a single scale factor cannot fully match this join
+  ch2-short | ch2-medium                        overlap     0.8964   yes    -25.6% (5.2s) residual calibration step
+  ch2-medium | ch2-long                         overlap        n/a    NO    -97.6% (1.2s) continuous
+      reason: overlap S/N too low (blue=1.82, red=4.14, need >=3)
+  ch2-long | ch3-short                          overlap     1.9341   yes     -9.8% (2.0s) step significant but spectrum is locally curved here (likely real structure)
+      note: ratio is wavelength dependent (+5.630+/-1.379 dex/um); a single scale factor cannot fully match this join
+  ch3-short | ch3-medium                        overlap     1.0245   yes    +19.2% (2.8s) residual calibration step
+  ch3-medium | ch3-long                         overlap     1.0189   yes     -4.8% (1.0s) continuous
+  ch3-long | ch4-short                          overlap     0.9969   yes    -16.9% (4.5s) step significant but spectrum is locally curved here (likely real structure)
+  ch4-short | ch4-medium                        overlap     0.7548   yes    -30.6% (6.0s) residual calibration step
+  ch4-medium | ch4-long                         overlap     0.5715   yes    -38.9% (4.4s) step significant but spectrum is locally curved here (likely real structure)
+  ! the usable-overlap graph is disconnected:
+    ch1-short,ch1-medium,ch1-long,ch2-short,ch2-medium |
+    ch2-long,ch3-short,ch3-medium,ch3-long,ch4-short,ch4-medium,ch4-long.
+    Segments in different groups are NOT cross-calibrated against each
+    other; the flux step between groups is whatever the data happened to
+    have. Fix this upstream (recover the overlap, or supply an external
+    photometric tie) rather than by forcing a scale here.
+  ! ch1-medium|ch1-long still steps by -46.2% (9.8 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch1-long|ch2-short still steps by +11.9% (7.2 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch2-short|ch2-medium still steps by -25.6% (5.2 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch3-short|ch3-medium still steps by +19.2% (2.8 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+  ! ch4-short|ch4-medium still steps by -30.6% (6.0 sigma) after stitching;
+    the scale was applied but a single factor did not fully match the join
+    -- check the tilt note above, this usually means the mismatch is
+    wavelength dependent (aperture-correction or residual-background shape)
+    rather than a flat offset
+Saved combined spectrum to SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_abi_combined.fits / .ecsv
+
+Final combined spectrum: SN2024aecx/MIRI-MRS/SN2024aecx_2025-12-28/reextract/SN2024aecx_2025-12-28_abi_combined.fits / .ecsv
+  recorded in products.csv: MIRI-MRS SN2024aecx_2025-12-28 abi_combined
+
+Product index: SN2024aecx/products.csv

@@ -10,68 +10,98 @@ name,species,lam_peak_um,lam_min_um,lam_max_um,kind,transition,color,notes
 # (CO, SiO) the bracket covers the whole band system, which is the useful
 # thing to shade -- the individual heads are in the 'transition' column.
 #
-# kind : molecular | pah | silicate | crystalline | ice | carbon | other
-#        Used for colouring and for filtering which families are drawn.
+# kind : molecular | pah | silicate | crystalline | ice | carbon | aliphatic |
+#        oxide | sulfide | nanodiamond | other
+#        'aliphatic', 'oxide', 'sulfide', 'nanodiamond' are NEW kinds added in
+#        this revision (not in the original schema) -- update any code that
+#        enumerates kinds explicitly. Used for colouring and for filtering
+#        which families are drawn.
 #
 # IMPORTANT: band positions for solid-state features shift with grain
 # composition, size, shape and temperature -- the amorphous silicate peak
-# moves between roughly 9.3 and 9.8 um depending on the dust model. Treat
-# these brackets as where to look, not as a measurement.
+# moves between roughly 9.1 and 10.5 um depending on Mg/Fe content and grain
+# shape (CDE vs sphere), and genuinely broadens/redshifts further for a
+# continuous distribution of ellipsoids (CDE) vs Mie spheres of the same
+# material (Bohren & Huffman 1983; Min, Hovenier & de Koter 2003). Treat
+# these brackets as where to look, not as a measurement. Rows whose
+# literature support is thin or contested say so explicitly in notes --
+# search for "UNCERTAIN"/"CONTESTED"/"PREDICTED, NOT YET DETECTED" below.
 # ---------------------------------------------------------------------------
-CO fundamental,CO,4.67,4.40,5.40,molecular,v=1-0 delta-v=1,#d62728,Strong in cool SN/AGB ejecta; band head at 4.67 um with a red-degraded P-branch
-CO first overtone,CO,2.35,2.29,2.50,molecular,v=2-0 delta-v=2,#d62728,Band heads at 2.294 2.323 2.353 2.383 2.414 um; the classic NIR CO signature
-CO second overtone,CO,1.58,1.55,1.80,molecular,v=3-0 delta-v=3,#d62728,Weak; needs high column
-SiO fundamental,SiO,8.00,7.50,9.50,molecular,v=1-0,#9467bd,Broad; overlaps the amorphous silicate feature so the two must be fitted together
-SiO first overtone,SiO,4.03,3.95,4.20,molecular,v=2-0,#9467bd,Band heads near 4.00-4.10 um
-SiS fundamental,SiS,13.3,12.8,14.2,molecular,v=1-0,#9467bd,
+CO fundamental,CO,4.67,4.40,5.40,molecular,v=1-0 delta-v=1,#d62728,"Strong in cool SN/AGB ejecta; band head at 4.67 um with a red-degraded P-branch. Detected in SN 1987A from ~day 160 onward (Danziger et al. 1991; Liu & Dalgarno 1995; Matsuura et al. 2024 JWST MIRI/MRS) and in SN 2004et/2017eaw with JWST (Shahbandeh et al. 2023, MNRAS 523, 6048; Kotak et al. 2005 for ground-based precedent)"
+CO first overtone,CO,2.35,2.29,2.50,molecular,v=2-0 delta-v=2,#d62728,"Band heads at 2.294 2.323 2.353 2.383 2.414 um; the classic NIR CO signature; detected in SN 1987A (Catchpole et al. 1988) and routinely in Type II SNe CSM/ejecta"
+CO second overtone,CO,1.58,1.55,1.80,molecular,v=3-0 delta-v=3,#d62728,"Weak; needs high column; rarely reported in SNe, included for completeness"
+SiO fundamental,SiO,8.00,7.50,9.50,molecular,v=1-0,#9467bd,"Broad; overlaps the amorphous silicate feature so the two must be fitted together. Detected in SN 1987A (Roche et al. 1991; Kotak et al. 2005) and tentatively in JWST spectra of several Type II SNe (Shahbandeh et al. 2023; Van Dyk et al. 2024 for SN 2023ixf); position/width here follow gas-phase band-head systematics, not a single lab measurement"
+SiO first overtone,SiO,4.03,3.95,4.20,molecular,v=2-0,#9467bd,"Band heads near 4.00-4.10 um; weaker than the fundamental, rarely isolated from the CO fundamental red wing"
+SiS fundamental,SiS,13.3,12.8,14.2,molecular,v=1-0,#9467bd,"PREDICTED to be abundant in O/C-rich ejecta zones by chemical-kinetic models (Sarangi & Cherchneff 2013, ApJ 776, 107; Cherchneff Talbi & Cernicharo 2025, A&A, arXiv:2510.01079 -- predict SiS can exceed SiO in mass by day ~400-500) but as of 2024 no unambiguous JWST spectral detection has been published for any CCSN; treat an identification here as tentative and check for corroborating SiO/CO"
 AlO B-X (0-0),AlO,0.4842,0.4800,0.4900,molecular,B2Sigma-X2Sigma 0-0,#17becf,Electronic band; optical not JWST but kept for cross-instrument work
 AlO B-X (1-0),AlO,0.4648,0.4610,0.4700,molecular,B2Sigma-X2Sigma 1-0,#17becf,
 AlO B-X (0-1),AlO,0.5079,0.5040,0.5140,molecular,B2Sigma-X2Sigma 0-1,#17becf,
 AlO B-X (0-2),AlO,0.5336,0.5290,0.5400,molecular,B2Sigma-X2Sigma 0-2,#17becf,
-AlO fundamental,AlO,10.9,10.3,11.6,molecular,v=1-0,#17becf,Vibrational band; blends with the 11.3 um PAH and SiC features
+AlO fundamental,AlO,10.9,10.3,11.6,molecular,v=1-0,#17becf,"Vibrational band; blends with the 11.3 um PAH and SiC features; UNCERTAIN position, estimated from harmonic scaling of the electronic-band force constant, not a direct lab IR measurement -- treat with caution"
 SiN,SiN,0.4000,0.3900,0.4200,molecular,electronic,#17becf,
-CS fundamental,CS,7.9,7.6,8.3,molecular,v=1-0,#9467bd,
+CS fundamental,CS,7.9,7.6,8.3,molecular,v=1-0,#9467bd,"PREDICTED minor condensation-chemistry product in S/C-rich zones (Sarangi & Cherchneff 2013); not yet robustly isolated in any published CCSN JWST spectrum, would blend with SiO fundamental red wing and PAH 7.7 complex"
+CO2 fundamental (gas),CO2,4.30,4.20,4.45,molecular,nu3 asymmetric stretch (gas),#9467bd,"PREDICTED by ejecta chemistry models (Sarangi & Cherchneff 2013; Liljegren et al. 2020, A&A 642, A135) as a trace species; NOT YET DETECTED in a CCSN spectrum as of this writing; would overlap the CO2 ice 4.27 um feature and the CO fundamental blue wing -- gas vs ice CO2 are not separable from peak position alone, only from profile shape"
 CN red system,CN,1.10,1.05,1.20,molecular,A2Pi-X2Sigma,#17becf,
-H2O bending,H2O,6.2,5.5,7.5,molecular,nu2 bend (gas),#1f77b4,Gas-phase; broad and easily confused with the 6.2 um PAH
+H2O bending,H2O,6.2,5.5,7.5,molecular,nu2 bend (gas),#1f77b4,"Gas-phase; broad and easily confused with the 6.2 um PAH and 6.2 um H2O ice bands"
 H2O stretch,H2O,2.7,2.5,3.1,molecular,nu1/nu3 stretch (gas),#1f77b4,
 OH,OH,2.9,2.7,3.2,molecular,fundamental,#1f77b4,
-PAH 3.3,PAH,3.29,3.20,3.40,pah,C-H stretch,#ff7f0e,Aromatic C-H stretch; the cleanest PAH band in the NIR
-PAH 6.2,PAH,6.22,6.00,6.45,pah,C-C stretch,#ff7f0e,Ionised PAH tracer
-PAH 7.7,PAH,7.70,7.20,8.20,pah,C-C stretch complex,#ff7f0e,A complex of 7.6 and 7.8 um sub-features; usually the strongest PAH band
-PAH 8.6,PAH,8.60,8.30,8.90,pah,C-H in-plane bend,#ff7f0e,Sits on the blue wing of the silicate feature
-PAH 11.3,PAH,11.26,11.10,11.65,pah,C-H out-of-plane solo,#ff7f0e,Neutral PAH tracer; overlaps forsterite 11.3 and SiC 11.3
-PAH 12.0,PAH,12.00,11.80,12.20,pah,C-H oop duo,#ff7f0e,
-PAH 12.7,PAH,12.70,12.50,13.00,pah,C-H oop trio,#ff7f0e,Blends with [Ne II] 12.81
-PAH 13.5,PAH,13.55,13.40,13.70,pah,C-H oop quarto,#ff7f0e,
-PAH 14.2,PAH,14.20,14.00,14.40,pah,C-H oop,#ff7f0e,
-PAH 16.4,PAH,16.45,16.20,16.70,pah,C-C-C bend,#ff7f0e,
-PAH 17.4,PAH,17.38,17.20,17.60,pah,C-C-C bend,#ff7f0e,
-PAH 17.8,PAH,17.87,17.70,18.10,pah,C-C-C bend,#ff7f0e,
-Silicate 9.7,amorphous silicate,9.70,8.00,12.50,silicate,Si-O stretch,#8c564b,The classic broad amorphous silicate feature; in emission or absorption depending on optical depth and geometry
-Silicate 18,amorphous silicate,18.00,15.00,22.00,silicate,O-Si-O bend,#8c564b,Partner of the 9.7 um feature; their ratio constrains grain size and optical depth
-Forsterite 11.3,Mg2SiO4,11.30,11.15,11.45,crystalline,crystalline olivine,#2ca02c,Narrow; overlaps PAH 11.3 -- the two are separable only at MRS resolution
+PAH 3.3,PAH,3.29,3.20,3.40,pah,aromatic C-H stretch,#ff7f0e,"Aromatic C-H stretch; the cleanest PAH band in the NIR (Tielens 2008, ARA&A 46, 289; Li & Draine 2001, ApJ 554, 778)"
+PAH 6.2,PAH,6.22,6.00,6.45,pah,aromatic C-C stretch,#ff7f0e,"Ionised-PAH tracer; peak position is a diagnostic itself -- ""class A"" sources peak ~6.2, ""class B"" (more processed/aged dust, e.g. some evolved stars and SN-like environments) peak nearer 6.3 (Peeters et al. 2002, A&A 390, 1089); if you see this shifted redward of 6.22 in a SN host region, that classification matters more than the centroid alone"
+PAH 7.7,PAH,7.70,7.20,8.20,pah,aromatic C-C stretch complex,#ff7f0e,"A complex of (at least) 7.6 and 7.8 um sub-features plus a 7.9 um shoulder; usually the strongest PAH band (Peeters et al. 2002; Draine & Li 2007, ApJ 657, 810 Table for the PAH emission model used in most SED codes)"
+PAH 8.6,PAH,8.60,8.30,8.90,pah,aromatic C-H in-plane bend,#ff7f0e,"Sits on the blue wing of the silicate feature; degenerate with that continuum unless the silicate is fitted first"
+PAH 11.0,PAH,11.00,10.85,11.15,pah,aromatic C-H oop (cation contribution),#ff7f0e,"Blue shoulder/sub-feature of the 11.2-11.3 complex, usually attributed to cationic PAHs (Hony et al. 2001, A&A 370, 1030); NOTE the literature convention split -- ISO/Spitzer papers usually call the main neutral-PAH peak ""11.2"", JWST/ground papers studying SNe often call the same physical band ""11.3""; they are the same feature, not two bands, see the PAH 11.3 row below"
+PAH 11.3,PAH,11.26,11.10,11.65,pah,aromatic C-H oop solo (neutral),#ff7f0e,"Neutral-PAH tracer; overlaps forsterite 11.3 and SiC 11.3 crystalline/solid-state bands -- at MIRI MRS resolution (R~1500-3500) these are only separable by profile width and shape (PAH: ~0.15-0.3 um FWHM asymmetric; SiC/forsterite: narrower, more symmetric), not by centroid alone. Also referred to as ""11.2"" in older ISO/Spitzer PAH literature (Hony et al. 2001)"
+PAH 12.0,PAH,12.00,11.80,12.20,pah,aromatic C-H oop duo,#ff7f0e,
+PAH 12.7,PAH,12.70,12.50,13.00,pah,aromatic C-H oop trio,#ff7f0e,Blends with [Ne II] 12.81 at low/moderate resolution
+PAH 13.5,PAH,13.55,13.40,13.70,pah,aromatic C-H oop,#ff7f0e,"Weak; part of the Hony et al. (2001) 11-15 um decomposition"
+PAH 14.2,PAH,14.20,14.00,14.40,pah,aromatic C-C-C bend,#ff7f0e,Weak
+PAH 16.4,PAH,16.45,16.20,16.70,pah,aromatic C-C-C bend,#ff7f0e,"Van Kerckhoven et al. 2000, A&A 357, 1013"
+PAH 17.4,PAH,17.38,17.20,17.60,pah,aromatic C-C-C bend,#ff7f0e,"Van Kerckhoven et al. 2000; Smith et al. 2007, ApJ 656, 770 (SINGS)"
+PAH 17.8,PAH,17.87,17.70,18.10,pah,aromatic C-C-C bend,#ff7f0e,"Overlaps the red wing of the 15-20 um PAH plateau and the blue wing of the 18 um silicate feature"
+PAH plateau 6-9,PAH,7.00,5.50,9.00,pah,underlying C-C-C/C-H blend plateau,#ffbb78,"Broad underlying continuum/plateau beneath the 6.2/7.7/8.6 discrete features (Peeters et al. 2004; Smith et al. 2007); often attributed to a distribution of larger/more irregular PAHs or PAH clusters. Must be fitted as a separate broad component or it will bias the 7.7 feature flux"
+PAH plateau 11-15,PAH,12.50,11.00,15.00,pah,underlying C-H oop blend plateau,#ffbb78,"Broad plateau under the 11.3/12.0/12.7/13.5/14.2 features (Hony et al. 2001); position/strength ratio to the discrete features is itself used as a PAH processing/size diagnostic"
+PAH plateau 15-20,PAH,17.50,15.00,20.00,pah,underlying skeletal blend plateau,#ffbb78,"Broad plateau under 16.4/17.4/17.8 (Van Kerckhoven et al. 2000; Smith et al. 2007); at low S/N this plateau is easy to mistake for silicate 18 um continuum curvature -- fit silicate first"
+Silicate 9.7 (generic/astronomical),amorphous silicate,9.70,8.00,12.50,silicate,Si-O stretch,#8c564b,"Generic ""astronomical silicate"" (Draine & Lee 1984, ApJ 285, 89; Draine 2003, ARA&A 41, 241) -- use this row when composition is unknown. In emission or absorption depending on optical depth and geometry. Peak genuinely varies ~9.1-10.5 um with Mg/Fe content (see composition-resolved rows below) and the whole profile broadens/redshifts for CDE grain shapes vs Mie spheres of the same material (Bohren & Huffman 1983; Min et al. 2003, A&A 404, 35) and for larger grains"
+Silicate 9.7 (Mg-rich olivine),"(Mg,Fe)2SiO4 Mg-rich",9.3,8.0,11.0,silicate,Si-O stretch,#8c564b,"Forsterite-normative amorphous olivine glass; peak near 9.3 um, blueward of the Fe-rich case (Dorschner et al. 1995, A&A 300, 503; Jager et al. 2003, A&A 408, 193). UNCERTAIN exact centroid for a given SN -- depends on the actual Mg# of condensed grains, which is not independently known a priori"
+Silicate 9.7 (Fe-rich olivine),"(Mg,Fe)2SiO4 Fe-rich",10.2,8.5,12.5,silicate,Si-O stretch,#8c564b,"Fe substitution shifts and broadens the feature redward of the Mg end-member (Dorschner et al. 1995); laboratory glasses with Fe/(Mg+Fe) > 0.4 push the peak toward 10.5 um and add a weak 18-20 um red excess"
+Silicate 9.7 (amorphous pyroxene),MgSiO3 (enstatite-normative),9.3,8.5,10.5,silicate,Si-O stretch,#8c564b,"Pyroxene-stoichiometry glass; narrower and slightly blueward of olivine glass of the same Mg/Fe (Jager et al. 1994, A&A 292, 641; Dorschner et al. 1995) -- olivine vs pyroxene network connectivity, not just Mg/Fe, sets the exact shape"
+Silicate 18 (generic/astronomical),amorphous silicate,18.00,15.00,24.00,silicate,O-Si-O bend,#8c564b,"Partner of the 9.7 um feature; their flux ratio constrains grain size and optical depth (Draine & Lee 1984). Widened the red edge relative to the original entry (to 24 um) because lab olivine/pyroxene bending-mode complexes genuinely extend that far (Jager et al. 2003; Demyk et al. 2017, A&A 606, A50)"
+Silicate 18 (olivine bend),"(Mg,Fe)2SiO4 amorphous",18.0,15.0,22.0,silicate,O-Si-O bend,#8c564b,"Olivine-glass bending complex tends to peak bluer (~16-19 um) than pyroxene glass of similar Mg/Fe (Jager et al. 2003; Demyk et al. 2017, 2022 A&A 666, A192 low-T constants)"
+Silicate 18 (pyroxene bend),MgSiO3 amorphous,20.5,18.0,24.0,silicate,O-Si-O bend,#8c564b,"Pyroxene-glass bending complex tends to peak redder (~20-21 um) than olivine glass (Jager et al. 2003; Demyk et al. 2017); UNCERTAIN -- lab-to-lab scatter in this sub-feature is larger than for the 9.7 um stretch"
+Forsterite 11.3,Mg2SiO4,11.30,11.15,11.45,crystalline,crystalline olivine Si-O stretch,#2ca02c,"Narrow; overlaps PAH 11.3/11.2 and SiC 11.3 -- the three are separable only at MRS resolution by linewidth (Koike et al. 2003, A&A 399, 1101; Molster & Waters 2003)"
 Forsterite 16.2,Mg2SiO4,16.20,16.00,16.40,crystalline,crystalline olivine,#2ca02c,
 Forsterite 19.7,Mg2SiO4,19.70,19.40,20.00,crystalline,crystalline olivine,#2ca02c,
 Forsterite 23.7,Mg2SiO4,23.70,23.30,24.10,crystalline,crystalline olivine,#2ca02c,
-Forsterite 27.6,Mg2SiO4,27.60,27.10,28.10,crystalline,crystalline olivine,#2ca02c,Near the MRS ch4-long red cutoff where calibration is poorest
+Forsterite 27.6,Mg2SiO4,27.60,27.10,28.10,crystalline,crystalline olivine,#2ca02c,"Near the MRS ch4-long red cutoff where calibration is poorest. (A further forsterite band near 33.6/69 um is a well-known temperature diagnostic -- Koike et al. 2006, A&A 449, 583 -- but both lie beyond your stated 28 um working range, so only noted here, not tabulated.)"
 Forsterite 33.6,Mg2SiO4,33.60,33.00,34.20,crystalline,crystalline olivine,#2ca02c,Beyond MRS coverage
 Enstatite 9.3,MgSiO3,9.30,9.15,9.45,crystalline,crystalline pyroxene,#2ca02c,
 Enstatite 10.6,MgSiO3,10.60,10.45,10.75,crystalline,crystalline pyroxene,#2ca02c,
 Enstatite 11.6,MgSiO3,11.60,11.45,11.75,crystalline,crystalline pyroxene,#2ca02c,
 Enstatite 19.5,MgSiO3,19.50,19.20,19.80,crystalline,crystalline pyroxene,#2ca02c,
 Enstatite 21.5,MgSiO3,21.50,21.20,21.80,crystalline,crystalline pyroxene,#2ca02c,
-Enstatite 24.5,MgSiO3,24.50,24.20,24.80,crystalline,crystalline pyroxene,#2ca02c,
-SiC 11.3,SiC,11.30,10.60,11.90,other,Si-C stretch,#e377c2,Carbon-star dust; degenerate with PAH 11.3 and forsterite 11.3 at low resolution
-MgS 30,MgS,30.00,26.00,38.00,other,,#e377c2,Very broad; the '30 um feature'. Mostly beyond MRS
-FeS 23,FeS,23.00,22.00,24.50,other,,#e377c2,
-FeO 20,FeO,20.00,19.00,21.50,other,,#e377c2,
-Amorphous carbon,amorphous carbon,,2.00,30.00,carbon,featureless continuum,#7f7f7f,No band structure; shows up only as continuum slope -- listed so it is not forgotten as a dust candidate
-Graphite 11.5,graphite,11.50,11.00,12.00,carbon,,#7f7f7f,
-H2O ice 3.05,H2O ice,3.05,2.80,3.50,ice,O-H stretch,#1f77b4,Deep absorption; a broad red wing indicates grain growth
+Enstatite 24.5,MgSiO3,24.50,24.20,24.80,crystalline,crystalline pyroxene,#2ca02c,"Individual resonances per Koike et al. 2000 (Icarus 145, 541) and Chihara et al. 2002 (A&A 391, 267) lab spectra; crystalline silicates are not yet robustly identified in any JWST CCSN spectrum as of 2024 -- flagged here as ""what to look for"", not ""what has been seen"""
+SiC 11.3,SiC,11.30,10.60,11.90,other,Si-C stretch,#e377c2,"Carbon-star dust signature (Treffers & Cohen 1974, ApJ 188, 545) genuinely degenerate with PAH 11.3/11.2 and forsterite 11.3 at low/moderate resolution. Profile is the only discriminant: SiC alpha-polytype peaks ~11.3 um and is fairly symmetric; beta-SiC/smaller or more irregular grains shift and broaden it toward 10.6-11.0 um (Speck et al. 2005, ApJ 634, 426; Pegourie 1988, A&A 194, 335). No credible SiC detection in any CCSN JWST spectrum has been published as of this writing -- SiC is an AGB/carbon-star signature by analogy, carried here as a candidate degeneracy, not a confirmed CCSN species"
+Amorphous carbon,amorphous carbon,,2.00,30.00,carbon,featureless continuum,#7f7f7f,"No band structure; shows up only as continuum slope -- listed so it is not forgotten as a dust candidate. Optical constants: Zubko et al. 1996, MNRAS 282, 1321; Rouleau & Martin 1991, ApJ 377, 526; Hanner 1988 ""AC"" grains used in many SN dust-mass fits (e.g. Wesson et al. 2015, MNRAS 446, 2089; Bevan 2018, MNRAS 480, 4659)"
+"Graphite (featureless, MIR)",graphite,,2.00,30.00,carbon,featureless continuum,#7f7f7f,"CORRECTED from the previous ""Graphite 11.5"" entry: I could not find a credible laboratory or astronomical basis for a localised graphite band at 11.5 um in this wavelength range. Graphite's only strong, well-established spectral signature is the 2175 Angstrom UV bump (Stecher 1965), far outside JWST coverage; in the mid-IR, graphite (like amorphous carbon) is essentially featureless (Draine & Lee 1984; Draine 2003). Recommend DROPPING the old 11.5 um row unless you have a specific source for it -- I have replaced it with this featureless-continuum entry so the species is not silently lost from the table"
+HAC continuum,hydrogenated amorphous carbon,,2.00,20.00,carbon,featureless continuum + weak C-H bands,#7f7f7f,"Rising/curved featureless continuum carrying weak superimposed C-H bands (see the aliphatic rows below); optical constants and model: Jones et al. 2013 (A&A 558, A62, THEMIS); Duley & Williams 1981 (MNRAS 196, 269); Grishko & Duley 2002 (ApJ 568, 448). A plausible CCSN carbon-dust carrier alongside amorphous carbon, not yet uniquely distinguished from it in any SN spectrum published to date"
+Aliphatic C-H stretch 3.4,aliphatic hydrocarbon,3.40,3.38,3.60,aliphatic,sp3 C-H stretch (CH2/CH3),#bcbd22,"NEW KIND. Satellite/complex redward of the aromatic 3.3 um PAH band, multi-component near 3.42/3.48/3.56 um (Pendleton & Allamandola 2002, ApJS 138, 75; Dartois et al. 2007, A&A 463, 635; diffuse-ISM analogue). A 3.4/3.3 flux ratio well above the typical ISM/PAH value (~2-10x weaker than 3.3 normally) is one of the better host-vs-ejecta discriminants discussed in the prose below"
+Aliphatic C-H deformation 6.85,aliphatic hydrocarbon,6.85,6.80,7.00,aliphatic,CH2/CH3 bending (sp3),#bcbd22,"NEW KIND. Pendleton & Allamandola 2002; blends with the blue wing of the 7.7 um PAH complex and can be confused with a weak carbonate/sulfate dip in absorption-dominated spectra"
+Aliphatic C-H deformation 7.25,aliphatic hydrocarbon,7.25,7.10,7.35,aliphatic,CH3 symmetric deformation (sp3),#bcbd22,"NEW KIND. Weaker partner of the 6.85 um band (Pendleton & Allamandola 2002; Chiar et al. 2013, ApJ 770, 78)"
+Alumina amorphous 12,Al2O3 amorphous,12.0,10.5,14.0,oxide,Al-O stretch,#c49c94,"NEW KIND. Broad single band from amorphous Al2O3 (corundum-type network); distinct from crystalline corundum (see next row). Begemann et al. 1997, ApJ 476, 199; Posch et al. 1999, A&A 352, 609 (detected in some O-rich AGB/RSG spectra). PREDICTED SN condensate (alumina is expected to be among the first high-temperature condensates -- Sarangi & Cherchneff 2015, ApJ 807, 168; Sluder et al. 2018, MNRAS 480, 5580) but not yet confirmed in any CCSN JWST spectrum"
+Corundum crystalline 16.8,Al2O3 crystalline (corundum),16.8,16.0,17.6,oxide,Al-O lattice mode,#c49c94,"NEW KIND. UNCERTAIN/rare; crystalline corundum shows sharper structure near 16.8 and 21 um (Koike et al. 1995, Icarus 114, 203; Posch et al. 1999) in contrast to the broad amorphous-alumina band above"
+Corundum crystalline 21,Al2O3 crystalline (corundum),21.0,20.0,22.0,oxide,Al-O lattice mode,#c49c94,"NEW KIND. See Corundum crystalline 16.8 row; UNCERTAIN, no SN detection claimed to date"
+MgO periclase 19.5,MgO,19.5,18.8,20.3,oxide,Mg-O lattice mode (rock-salt),#c49c94,"NEW KIND. Single rock-salt-lattice absorption; narrower than the silicate complex it sits inside. Lab constants: Henning & Mutschke 1997, A&A 327, 743. Tentatively invoked for some O-rich AGB/RSG spectra (Speck et al. 2000, A&AS 146, 437) but CONTESTED/rare even there, and has NOT been claimed in any published CCSN spectrum -- treat strictly as a candidate"
+Silica (amorphous SiO2) 9.1,SiO2 amorphous,9.1,8.7,9.6,oxide,"Si-O stretch (network former, no Mg/Fe)",#c49c94,"NEW KIND. Amorphous silica shows a doublet-like structure near 9.1 and 21.3 um, distinguishable in principle from (Mg,Fe) silicates because it has no network-modifying cation (Fabian et al. 2000, A&A 364, 282). PREDICTED as a possible early high-temperature SN condensate (silica/silicate precursor chemistry, Sarangi & Cherchneff 2015) but essentially unconfirmed observationally in any CCSN to date; easily confused with the blue wing of the 9.7 um silicate complex"
+Silica (amorphous SiO2) 21.3,SiO2 amorphous,21.3,20.5,22.2,oxide,Si-O bend,#c49c94,"NEW KIND. See Silica 9.1 row; Fabian et al. 2000; UNCERTAIN, candidate only"
+MgS 30,MgS,30.00,26.00,38.00,sulfide,Mg-S lattice mode,#8c6d31,"CONTESTED carrier of the classic carbon-star ""30 um feature"" (first proposed by Goebel & Moseley 1985, ApJ 290, L35; Hony et al. 2002, A&A 390, 533). Mostly beyond MRS range (red edge ~28 um) for most redshifts, so this is largely a ""look at the red edge of your last channel"" entry. The MgS identification has a known mass-budget problem -- Zhukovska & Gail 2008 (A&A 486, 487) and Zhang, Jiang & Li 2009 (ApJ 702, 680) show the implied MgS mass can exceed the total available interstellar sulfur in some sources -- and Messenger, Speck & Volk 2013 (ApJ 764, 142) find the profile does not uniformly fit across carbon stars. In a CCSN this is an analogy import from AGB/PPNe dust chemistry, not yet detected in any CCSN JWST spectrum; report any 25-30 um excess as ""consistent with a sulfide or very cold silicate/carbon continuum"", not as a firm MgS identification"
+FeS 23,FeS,23.00,22.00,24.50,sulfide,Fe-S lattice mode (troilite-like),#8c6d31,"UNCERTAIN/weakly supported even in its original AGB context -- the 23 um troilite-like band used in some dust-opacity compilations (Pollack et al. 1994, ApJ 421, 615) rests more on assumed cosmochemical sulfide abundances than on a strong, uncontested direct spectral identification; lab constants from Begemann et al. 1994 (ApJ 423, L71) / Henning & Stognienko 1996 (A&A 311, 291). PREDICTED SN condensate by chemical-kinetics models (CaS/FeS/MgS family -- Sarangi & Cherchneff 2015) but not yet confirmed in a CCSN spectrum"
+FeO 20,FeO,20.00,19.00,21.50,oxide,Fe-O lattice mode (wuestite-like),#c49c94,"Moved from kind=other to kind=oxide in this revision. UNCERTAIN; based on extrapolation from wuestite/iron-oxide lab optical constants (Henning & Mutschke 1997) rather than a firm astronomical identification; essentially a placeholder for ""something in the Fe-O family could sit here"", not a confirmed band"
+Nanodiamond C-H sp3 3.43/3.53,nanodiamond,3.48,3.40,3.60,nanodiamond,C-H sp3 stretch (surface-terminated),#393b79,"NEW KIND. SPECULATIVE for CCSN dust. The only direct astronomical IR detection of this feature is in two Herbig Ae/Be protoplanetary disks (Guillois, Ledoux & Nenner 1999, ApJ 521, L133) -- not in any supernova. The case for an SN *origin* of presolar nanodiamonds rests on meteoritic isotopic anomalies (Lewis et al. 1987, Nature 326, 160; Clayton, Meyer & Zinner 1995/1999) and is indirect, cosmochemical evidence, not an IR spectroscopic SN detection. Include this row only to flag what to look for; do not report a detection here without extraordinary care, since the band overlaps the aliphatic 3.4 um hydrocarbon complex and is easily confused with it"
+H2O ice 3.05,H2O ice,3.05,2.80,3.50,ice,O-H stretch,#1f77b4,"Deep absorption; a broad red wing indicates grain growth (Boogert, Gerakines & Whittet 2015, ARA&A 53, 541, for the general ice-band review used here and below)"
 H2O ice 6.0,H2O ice,6.00,5.80,6.40,ice,H-O-H bend,#1f77b4,Overlaps the 6.2 um PAH band
 H2O ice 13,H2O ice,13.00,11.00,16.00,ice,libration,#1f77b4,Very broad; easily absorbed into a bad continuum fit
 CO2 ice 4.27,CO2 ice,4.27,4.20,4.35,ice,nu3 stretch,#1f77b4,Narrow and deep; a sensitive ice thermal-history probe
-CO2 ice 15.2,CO2 ice,15.20,15.00,15.60,ice,nu2 bend,#1f77b4,Double-peaked when crystalline
+CO2 ice 15.2,CO2 ice,15.20,15.00,15.60,ice,nu2 bend,#1f77b4,"Double-peaked when crystalline (Gerakines et al. 1995, A&A 296, 810)"
 CO ice 4.67,CO ice,4.675,4.64,4.71,ice,stretch,#1f77b4,Overlaps the gas-phase CO fundamental band head
 CH4 ice 7.7,CH4 ice,7.68,7.60,7.76,ice,nu4 bend,#1f77b4,Overlaps the 7.7 um PAH complex
 CH3OH ice 9.7,CH3OH ice,9.74,9.60,9.90,ice,C-O stretch,#1f77b4,In the silicate trough

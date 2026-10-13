@@ -78,6 +78,7 @@ import glob
 import io
 import json
 import os
+import textwrap
 import re
 import shutil
 
@@ -162,12 +163,42 @@ def extract_pfpc_style(cube_file, out_file, x, y, ifu_rfcorr=True,
     return wave, flux, err, meta
 
 
+
+def _abi_only_steps(wave_a, flux_a, wave_p, flux_p, tol_um=0.3, **kw):
+    """Discontinuities present in the ABI spectrum but not the PFPC one.
+
+    AstroBkgInterp models the background plane by plane. Where the fit
+    has too little field to constrain it -- the small-FOV channels, or a
+    wavelength range where the annulus clips the cube edge -- the model
+    level can change abruptly, and that change lands in the extracted
+    spectrum as a step. On ``SN2024aecx_2025-12-07`` the ABI ch3-long
+    spectrum jumps by a factor 2.85 at 16.17 um while the PFPC
+    extraction of *the same cube* is flat across that wavelength, which
+    is what identifies the step as a background-model artefact rather
+    than something in the data.
+
+    Comparing the two extractions is what makes the test specific. A
+    step detector run on the ABI spectrum alone cannot tell a background
+    failure from the edge of a real band; the PFPC extraction is an
+    independent measurement of the same cube and shares the real
+    structure but not the background model.
+    """
+    from jspec.discontinuity import find_steps
+
+    abi = find_steps(wave_a, flux_a, **kw)
+    pfpc = find_steps(wave_p, flux_p, **kw)
+    return [s for s in abi
+            if not any(abs(s.wavelength - t.wavelength) <= tol_um
+                       for t in pfpc)]
+
+
 def process_cube(cube_file, out_dir, product_name, ra=None, dec=None,
                   bkg_mode="polynomial", fwhm_scale=2.5, poly_k=3,
                   bin_size=9, min_aper_rad=5.0, aper_rad=7, ann_width=6,
                   wave_range=None, clip_sigma=5.0, n_sub=4, search_radius=8.0,
                   ifu_rfcorr=True, ifu_rscale=None, ifu_covar_scale=1.0,
-                  channel_overrides=None, skip_abi_channels=None):
+                  channel_overrides=None, skip_abi_channels=None,
+                  check_abi=False, fallback_snr=8.0, fallback_ratio=1.4):
     """AstroBkgInterp on one channel/band cube, then extract its
     background-subtracted spectrum. Returns (x1d_path, centroid_or_None)
     -- centroid is None when a fixed (ra, dec) was supplied instead of
@@ -189,7 +220,23 @@ def process_cube(cube_file, out_dir, product_name, ra=None, dec=None,
     this when the background fit degrades in the smaller-FOV channels
     (3, 4) relative to channel 1/2 -- e.g. {"3": {"poly_k": 2}, "4":
     {"poly_k": 1, "bin_size": 5}} to use a lower-order fit where there's
-    less field to constrain it."""
+    less field to constrain it.
+
+    `check_abi` (default False, roughly doubles the runtime) extracts the
+    same cube a second time with the PFPC recipe and reports any step in
+    the ABI spectrum that the PFPC extraction of the same cube does not
+    show. Such a step is a background-model failure.
+
+    It **reports only, and never substitutes**. The two extractions are
+    not interchangeable: PFPC does not subtract a background at all, so
+    it sits 1.2-10x above ABI. Dropping a PFPC band into an otherwise-ABI
+    spectrum is an *additive* offset, and the overlap rescaling in
+    `combine_epoch_spectrum` is *multiplicative*, so it cannot absorb one
+    -- it just moves the discontinuity to the band edges. Acting on the
+    report means re-running with `channel_overrides` (a better-constrained
+    background fit for that channel), `skip_abi_channels` (PFPC for the
+    whole channel, so there is no ABI/PFPC seam inside it), or
+    `exclude_ranges` for the corrupted span."""
     m = _CHBAND_RE.search(os.path.basename(cube_file))
     tag = f"ch{m.group(1)}-{m.group(2)}" if m else os.path.splitext(
         os.path.basename(cube_file))[0]
@@ -244,6 +291,37 @@ def process_cube(cube_file, out_dir, product_name, ra=None, dec=None,
     print(f"[{tag}] extracted {meta['n_good']}/{len(wave)} finite points "
           f"({wave[0]:.2f}-{wave[-1]:.2f} um) -> {x1d_file}")
 
+    if check_abi:
+        alt_file = os.path.join(out_dir, f"{tag_name}_pfpcstyle_x1d.fits")
+        try:
+            pw, pf, _pe, _pm = extract_pfpc_style(
+                cube_file, alt_file, src_x, src_y, ifu_rfcorr=ifu_rfcorr,
+                ifu_rscale=ifu_rscale, ifu_covar_scale=ifu_covar_scale)
+            bad = _abi_only_steps(wave, flux, pw, pf,
+                                  snr_min=fallback_snr,
+                                  min_ratio=fallback_ratio)
+        except Exception as exc:          # noqa: BLE001 - never fail the run
+            print(f"[{tag}] consistency check skipped ({exc})")
+            bad = []
+        if bad:
+            where = ", ".join(f"{s.wavelength:.3f}um x{s.ratio:.2f}"
+                              for s in bad[:3])
+            ch = channel_num or "?"
+            print(f"[{tag}] *** step(s) at {where} are in the "
+                  f"AstroBkgInterp spectrum but not in the PFPC extraction "
+                  f"of the same cube: the background model failed here.")
+            print(f"[{tag}]     Nothing has been changed. The PFPC "
+                  f"extraction is NOT a drop-in replacement -- it subtracts "
+                  f"no background, so swapping it in would move the jump to "
+                  f"the band edges. To act on this, re-run with one of:")
+            print(f"[{tag}]       --channel-overrides "
+                  f"'{{\"{ch}\": {{\"poly_k\": 1, \"bin_size\": 5}}}}'"
+                  f"   (better-constrained background fit)")
+            print(f"[{tag}]       --skip-abi-channels {ch}"
+                  f"                                  (PFPC for the whole "
+                  f"channel, no seam inside it)")
+            print(f"[{tag}]     comparison spectrum: {alt_file}")
+
     return x1d_file, centroid
 
 
@@ -284,6 +362,8 @@ def process_level3_dir_with_abi(level3_dir, out_dir, product_name, ra=None, dec=
                                  clip_sigma_combine=3.0, min_scale_snr=3.0,
                                  max_scale_factor=2.0, max_rel_uncertainty=0.3,
                                  channel_overrides=None, skip_abi_channels=None,
+                                 check_abi=False, trim_frac=0.02,
+                                 solver="global",
                                  **abi_extract_kwargs):
     """Run AstroBkgInterp + re-extraction on every channel/band cube in
     `level3_dir`, then combine all of them into one final spectrum for
@@ -297,6 +377,7 @@ def process_level3_dir_with_abi(level3_dir, out_dir, product_name, ra=None, dec=
     x1d_files = []
     for cube_file in cubes:
         x1d_file, _ = process_cube(cube_file, out_dir, product_name, ra=ra, dec=dec,
+                                    check_abi=check_abi,
                                     channel_overrides=channel_overrides,
                                     skip_abi_channels=skip_abi_channels,
                                     **abi_extract_kwargs)
@@ -306,14 +387,36 @@ def process_level3_dir_with_abi(level3_dir, out_dir, product_name, ra=None, dec=
     wave, flux, err, mjd_info, scale_log = combine_epoch_spectrum(
         x1d_files, auto_scale=auto_scale, clip_sigma=clip_sigma_combine,
         min_scale_snr=min_scale_snr, max_scale_factor=max_scale_factor,
-        max_rel_uncertainty=max_rel_uncertainty)
-    for s in scale_log:
-        if s["scaled"]:
-            print(f"  scaled new segment by {s['factor']:.4f} "
-                  f"+/- {s['factor_std']:.4f} to match established composite "
-                  f"(file: {s['file']})")
-        else:
-            print(f"  no rescale applied (file: {s['file']}) -- {s['reason']}")
+        max_rel_uncertainty=max_rel_uncertainty, trim_frac=trim_frac,
+        solver=solver)
+    try:
+        from jspec.discontinuity import find_steps
+        left = find_steps(wave, flux, snr_min=8.0, min_ratio=1.4,
+                          max_rise_um=0.06)
+        if left:
+            print("  remaining step(s) in the combined spectrum -- check these "
+                  "before using it:")
+            for st in left[:5]:
+                print(f"    {st.wavelength:.3f} um  x{st.ratio:.2f}  "
+                      f"S/N={st.snr:+.1f}")
+    except Exception:                      # noqa: BLE001 - diagnostic only
+        pass
+
+    report = scale_log[0].get("report") if scale_log else None
+    if report is not None:
+        # The global solver has far more to say than one factor per band --
+        # which joins it could not use and why, which ratios are wavelength
+        # dependent (a single factor cannot fix those), and whether the
+        # overlap graph came apart into independently anchored groups.
+        print(textwrap.indent(report.summary(), "  "))
+    else:
+        for s in scale_log:
+            if s["scaled"]:
+                print(f"  scaled new segment by {s['factor']:.4f} "
+                      f"+/- {s['factor_std']:.4f} to match established composite "
+                      f"(file: {s['file']})")
+            else:
+                print(f"  no rescale applied (file: {s['file']}) -- {s['reason']}")
 
     out_base = os.path.join(out_dir, f"{product_name}_abi_combined")
     save_combined_spectrum(wave, flux, err, out_base, mjd_info=mjd_info)
@@ -477,6 +580,32 @@ def main():
                           "uncertainty term is orders of magnitude larger than in other "
                           "channels -- a sign the fit has too little source/background "
                           "contrast to trust, not something poly_k tuning will fix.")
+    ap.add_argument("--solver", choices=("global", "sequential"),
+                    default="global",
+                    help="How the per-band scale factors are found. 'global' "
+                         "(default) measures every overlap and solves all "
+                         "bands at once as a weighted least-squares problem "
+                         "on the overlap graph, so a marginal seam is "
+                         "down-weighted rather than discarded and no seam "
+                         "can set the relative calibration of two halves of "
+                         "the spectrum. 'sequential' is the old bluest-first "
+                         "chain, kept only for reproducing earlier outputs.")
+    ap.add_argument("--check-abi", action="store_true",
+                    help="Extract every band a second time with the PFPC "
+                         "recipe and report any step present in the "
+                         "AstroBkgInterp spectrum but not in the PFPC one, "
+                         "which indicates the background model failed. "
+                         "Reports only -- it never substitutes, because the "
+                         "PFPC extraction subtracts no background and is not "
+                         "on the same flux scale. Roughly doubles the "
+                         "runtime.")
+    ap.add_argument("--trim-edge-frac", type=float, default=0.02,
+                    help="Fraction of each band's wavelength span dropped "
+                         "from each end before combining (default 0.02). "
+                         "Stops a badly calibrated band edge from setting "
+                         "the overlap scale factor for the whole band. "
+                         "Backed off automatically if it would leave too "
+                         "little overlap to scale on.")
     ap.add_argument("--no-rfcorr", action="store_true",
                      help="Disable the extra 1D residual-fringe correction in "
                           "Extract1dStep (on by default, matching PFPC's own "
@@ -530,7 +659,9 @@ def main():
         ifu_rfcorr=not args.no_rfcorr, ifu_covar_scale=args.ifu_covar_scale,
         auto_scale=not args.no_auto_scale, clip_sigma_combine=args.clip_sigma,
         min_scale_snr=args.min_scale_snr, max_scale_factor=args.max_scale_factor,
-        max_rel_uncertainty=args.max_rel_uncertainty)
+        max_rel_uncertainty=args.max_rel_uncertainty,
+        check_abi=args.check_abi, trim_frac=args.trim_edge_frac,
+              solver=args.solver)
 
     if args.level3_dir:
         if not args.product_name:

@@ -2,7 +2,8 @@ group,species,wavelength_um,label,kind,category,expected_width,notes
 # ---------------------------------------------------------------------------
 # jspec reference line list
 #
-# wavelength_um : REST-FRAME VACUUM wavelength in microns.
+# wavelength_um : REST-FRAME VACUUM wavelength in microns. All entries below,
+#                 including every addition in this revision, are vacuum.
 # kind          : recomb | forbidden | permitted | molecular | ice
 # category      : grouping used for colouring and for filtering (H, He, IME,
 #                 IGE, fine-structure, coronal, H2, molecular, ice)
@@ -15,7 +16,16 @@ group,species,wavelength_um,label,kind,category,expected_width,notes
 #                 feature and vice versa.
 #
 # Sources: NIST ASD (atomic); Atomic Line List v3 (forbidden); van Hoof 2018;
-# standard H recombination series (Rydberg, vacuum).
+# standard H recombination series (Rydberg, vacuum); Rho et al. 2008 (ApJ
+# 673, 271) and Docenko & Sunyaev 2010 (A&A 509, A59) for the Cas A IGE/IME
+# fine-structure MIR line tables used to cross-check several rows below;
+# Black & van Dishoeck 1987 (ApJ 322, 412) for H2 NIR ro-vibrational lines.
+#
+# NOTE: a row previously present here, "He,[He I],2.1132000,He I 2.113,
+# recomb,He,narrow", has been DROPPED in this revision. It could not be
+# traced to NIST ASD, the Atomic Line List, or any SN nebular-line paper,
+# and sits suspiciously close to both H2 1-0 S(1) (2.1218 um) and Br-gamma
+# (2.1661 um). Do not re-add it without a verifiable source.
 # ---------------------------------------------------------------------------
 H,H I,0.6564614,Halpha,recomb,H,either,Balmer alpha
 H,H I,0.4862683,Hbeta,recomb,H,either,Balmer beta
@@ -35,42 +45,41 @@ H,H I,2.6258700,Br-beta,recomb,H,either,Brackett
 H,H I,4.0522600,Br-alpha,recomb,H,either,Brackett
 H,H I,3.2969900,Pf-delta,recomb,H,either,Pfund
 H,H I,3.7405600,Pf-gamma,recomb,H,either,Pfund
-H,H I,4.6537800,Pf-beta,recomb,H,either,Pfund; blends with CO fundamental band head region
+H,H I,4.6537800,Pf-beta,recomb,H,either,"Pfund; blends with CO fundamental band head region"
 H,H I,7.4597800,Pf-alpha,recomb,H,either,Pfund
 H,H I,7.5024000,Hu-beta,recomb,H,either,Humphreys; blends with Pf-alpha
-H,H I,12.3719000,Hu-alpha,recomb,H,either,Humphreys; MIRI ch3 workhorse
+H,H I,12.3719000,Hu-alpha,recomb,H,either,"Humphreys; MIRI ch3 workhorse"
 He,He I,0.7067100,He I 7065,recomb,He,either,
-He,He I,1.0833300,He I 1.083,recomb,He,either,Metastable triplet; strong and often P-Cygni in SNe
+He,He I,1.0833300,He I 1.083,recomb,He,either,"Metastable triplet; strong and often P-Cygni in SNe"
 He,He I,1.7007000,He I 1.70,recomb,He,either,
-He,He I,2.0586900,He I 2.058,recomb,He,either,Singlet; sensitive to density
+He,He I,2.0586900,He I 2.058,recomb,He,either,"Singlet; sensitive to density"
 He,He II,1.0126400,He II 1.012,recomb,He,either,
-He,He II,4.6513000,He II 4.65,recomb,He,either,Pickering; blends with Pf-beta
-He,[He I],2.1132000,He I 2.113,recomb,He,narrow,
-IME,[O I],0.6302040,[O I] 6300,forbidden,IME,either,Classic SN nebular cooling line
-IME,[O I],0.6365540,[O I] 6364,forbidden,IME,either,Doublet partner of 6300
-IME,O I,0.8448000,O I 8446,permitted,IME,either,Lyman-beta fluorescence
+He,He II,4.6513000,He II 4.65,recomb,He,either,"Pickering; blends with Pf-beta"
+IME,[O I],0.6302040,[O I] 6300,forbidden,IME,either,"Classic SN nebular cooling line"
+IME,[O I],0.6365540,[O I] 6364,forbidden,IME,either,"Doublet partner of 6300"
+IME,O I,0.8448000,O I 8446,permitted,IME,either,"Lyman-beta fluorescence"
 IME,O I,1.1297000,O I 1.129,permitted,IME,either,
-IME,[O III],0.5008240,[O III] 5007,forbidden,IME,narrow,Host/CSM; rarely broad
+IME,[O III],0.5008240,[O III] 5007,forbidden,IME,narrow,"Host/CSM; rarely broad"
 IME,[O III],0.4960295,[O III] 4959,forbidden,IME,narrow,
-IME,[O IV],25.8903000,[O IV] 25.89,forbidden,fine-structure,either,High-ionisation; blends with [Fe II] 25.99
-IME,[Ne II],12.8135500,[Ne II] 12.81,forbidden,fine-structure,either,Strong MIR cooling line
+IME,[O IV],25.8903000,[O IV] 25.89,forbidden,fine-structure,either,"High-ionisation; blends with [Fe II] 25.99"
+IME,[Ne II],12.8135500,[Ne II] 12.81,forbidden,fine-structure,either,"Strong MIR cooling line"
 IME,[Ne III],15.5551000,[Ne III] 15.56,forbidden,fine-structure,either,
-IME,[Ne III],36.0135000,[Ne III] 36.01,forbidden,fine-structure,either,Beyond MRS red cutoff
-IME,[Ne V],14.3217000,[Ne V] 14.32,forbidden,coronal,either,Requires hard ionising continuum
+IME,[Ne III],36.0135000,[Ne III] 36.01,forbidden,fine-structure,either,"Beyond MRS red cutoff"
+IME,[Ne V],14.3217000,[Ne V] 14.32,forbidden,coronal,either,"Requires hard ionising continuum"
 IME,[Ne V],24.3175000,[Ne V] 24.32,forbidden,coronal,either,
 IME,[Ne VI],7.6524000,[Ne VI] 7.65,forbidden,coronal,either,
-IME,[Ar II],6.9853700,[Ar II] 6.99,forbidden,fine-structure,either,Often the strongest MIR line in late-time SNe
-IME,[Ar III],8.9910300,[Ar III] 8.99,forbidden,fine-structure,either,Sits on the silicate shoulder
+IME,[Ar II],6.9853700,[Ar II] 6.99,forbidden,fine-structure,either,"Often the strongest MIR line in late-time SNe"
+IME,[Ar III],8.9910300,[Ar III] 8.99,forbidden,fine-structure,either,"Sits on the silicate shoulder"
 IME,[Ar III],21.8302000,[Ar III] 21.83,forbidden,fine-structure,either,
 IME,[Ar V],7.9016000,[Ar V] 7.90,forbidden,coronal,either,
 IME,[Ar VI],4.5295000,[Ar VI] 4.53,forbidden,coronal,either,
 IME,[S III],0.9068900,[S III] 9069,forbidden,IME,either,
 IME,[S III],0.9531100,[S III] 9531,forbidden,IME,either,
 IME,[S III],18.7130000,[S III] 18.71,forbidden,fine-structure,either,
-IME,[S III],33.4810000,[S III] 33.48,forbidden,fine-structure,either,Beyond MRS red cutoff
-IME,[S IV],10.5105000,[S IV] 10.51,forbidden,fine-structure,either,In the silicate trough
+IME,[S III],33.4810000,[S III] 33.48,forbidden,fine-structure,either,"Beyond MRS red cutoff"
+IME,[S IV],10.5105000,[S IV] 10.51,forbidden,fine-structure,either,"In the silicate trough"
 IME,[S I],25.2490000,[S I] 25.25,forbidden,fine-structure,either,
-IME,[Si II],34.8152000,[Si II] 34.82,forbidden,fine-structure,either,Beyond MRS red cutoff
+IME,[Si II],34.8152000,[Si II] 34.82,forbidden,fine-structure,either,"Beyond MRS red cutoff"
 IME,Si I,1.6459000,Si I 1.646,permitted,IME,either,
 IME,[Mg IV],4.4866000,[Mg IV] 4.49,forbidden,coronal,either,
 IME,[Mg V],5.6098000,[Mg V] 5.61,forbidden,coronal,either,
@@ -78,49 +87,56 @@ IME,[Mg V],13.5213000,[Mg V] 13.52,forbidden,coronal,either,
 IME,Mg I,1.5040000,Mg I 1.504,permitted,IME,either,
 IME,[Ca II],0.7293200,[Ca II] 7291,forbidden,IME,either,
 IME,[Ca II],0.7325900,[Ca II] 7324,forbidden,IME,either,
-IME,Ca II,0.8500400,Ca II 8498,permitted,IME,either,NIR triplet
-IME,Ca II,0.8544400,Ca II 8542,permitted,IME,either,NIR triplet
-IME,Ca II,0.8664500,Ca II 8662,permitted,IME,either,NIR triplet
+IME,Ca II,0.8500400,Ca II 8498,permitted,IME,either,"NIR triplet"
+IME,Ca II,0.8544400,Ca II 8542,permitted,IME,either,"NIR triplet"
+IME,Ca II,0.8664500,Ca II 8662,permitted,IME,either,"NIR triplet"
 IME,[Ca IV],3.2068000,[Ca IV] 3.21,forbidden,coronal,either,
 IME,[Ca V],4.1585000,[Ca V] 4.16,forbidden,coronal,either,
 IME,[Ca V],11.4820000,[Ca V] 11.48,forbidden,coronal,either,
-IME,[Cl II],14.3678000,[Cl II] 14.37,forbidden,fine-structure,either,Blends with [Ne V] 14.32
+IME,[Cl II],14.3678000,[Cl II] 14.37,forbidden,fine-structure,either,"Blends with [Ne V] 14.32"
 IME,[K III],4.6180000,[K III] 4.62,forbidden,fine-structure,either,
 IME,[Na III],7.3178000,[Na III] 7.32,forbidden,fine-structure,either,
-IGE,[Fe II],1.2570200,[Fe II] 1.257,forbidden,IGE,either,Pairs with 1.644 for extinction
+IGE,[Fe II],1.2570200,[Fe II] 1.257,forbidden,IGE,either,"Pairs with 1.644 for extinction"
 IGE,[Fe II],1.2946000,[Fe II] 1.295,forbidden,IGE,either,
 IGE,[Fe II],1.3209000,[Fe II] 1.321,forbidden,IGE,either,
 IGE,[Fe II],1.5339000,[Fe II] 1.534,forbidden,IGE,either,
-IGE,[Fe II],1.6435500,[Fe II] 1.644,forbidden,IGE,either,Strongest NIR [Fe II]; extinction pair with 1.257
+IGE,[Fe II],1.6435500,[Fe II] 1.644,forbidden,IGE,either,"Strongest NIR [Fe II]; extinction pair with 1.257"
 IGE,[Fe II],1.6773000,[Fe II] 1.677,forbidden,IGE,either,
 IGE,[Fe II],1.8099000,[Fe II] 1.810,forbidden,IGE,either,
 IGE,[Fe II],4.1143000,[Fe II] 4.11,forbidden,IGE,either,
-IGE,[Fe II],5.3403000,[Fe II] 5.34,forbidden,fine-structure,either,MRS ch1 blue end
+IGE,[Fe II],5.3403000,[Fe II] 5.34,forbidden,fine-structure,either,"MRS ch1 blue end"
 IGE,[Fe II],17.9359000,[Fe II] 17.94,forbidden,fine-structure,either,
 IGE,[Fe II],24.5193000,[Fe II] 24.52,forbidden,fine-structure,either,
-IGE,[Fe II],25.9883000,[Fe II] 25.99,forbidden,fine-structure,either,Blends with [O IV] 25.89
+IGE,[Fe II],25.9883000,[Fe II] 25.99,forbidden,fine-structure,either,"Blends with [O IV] 25.89"
 IGE,[Fe III],22.9250000,[Fe III] 22.93,forbidden,fine-structure,either,
-IGE,[Fe III],1.6440000,[Fe III] 1.644,forbidden,IGE,either,Blend risk with [Fe II] 1.644
+IGE,[Fe III],1.6440000,[Fe III] 1.644,forbidden,IGE,either,"Blend risk with [Fe II] 1.644"
 IGE,[Fe IV],2.8360000,[Fe IV] 2.84,forbidden,IGE,either,
 IGE,[Fe VII],7.8150000,[Fe VII] 7.81,forbidden,coronal,either,
 IGE,[Fe VIII],5.4470000,[Fe VIII] 5.45,forbidden,coronal,either,
-IGE,[Co II],10.5210000,[Co II] 10.52,forbidden,IGE,either,Radioactive decay product tracer
+IGE,[Co II],10.5210000,[Co II] 10.52,forbidden,IGE,either,"Radioactive decay product tracer; Co is produced by 56Ni -> 56Co -> 56Fe, so its line flux traces the 56Co abundance and should fade on the 111.4-day 56Co half-life (Nadyozhin 1994, ApJS 92, 527) -- not 77 days, which is the 56Ni -> 56Co half-life instead"
 IGE,[Co II],14.7400000,[Co II] 14.74,forbidden,IGE,either,
 IGE,[Co II],15.4600000,[Co II] 15.46,forbidden,IGE,either,
-IGE,[Co III],11.8880000,[Co III] 11.89,forbidden,IGE,either,56Co tracer; decays away with the 77-day half-life
+IGE,[Co III],11.8880000,[Co III] 11.89,forbidden,IGE,either,"56Co tracer; CORRECTED -- 56Co decays with a half-life of 111.4 days (Nadyozhin 1994, ApJS 92, 527), not 77 days (the original note's 77-day figure is the 56Ni -> 56Co half-life, a different decay step)"
 IGE,[Ni II],6.6360000,[Ni II] 6.64,forbidden,IGE,either,
 IGE,[Ni II],10.6820000,[Ni II] 10.68,forbidden,IGE,either,
+IGE,[Ni II],12.7280000,[Ni II] 12.73,forbidden,IGE,either,"TENTATIVE addition -- seen in some Cas A ISO/Spitzer tables (cf. Docenko & Sunyaev 2010, A&A 509, A59); verify against NIST ASD/CHIANTI before relying on this value in a published result"
 IGE,[Ni I],7.5070000,[Ni I] 7.51,forbidden,IGE,either,
 IGE,[Ni III],7.3490000,[Ni III] 7.35,forbidden,IGE,either,
 IGE,[Ni III],11.0020000,[Ni III] 11.00,forbidden,IGE,either,
-H2,H2,28.2188000,H2 0-0 S(0),molecular,H2,narrow,Pure rotational
-H2,H2,17.0348000,H2 0-0 S(1),molecular,H2,narrow,Pure rotational
-H2,H2,12.2786000,H2 0-0 S(2),molecular,H2,narrow,Pure rotational
-H2,H2,9.6649000,H2 0-0 S(3),molecular,H2,narrow,Pure rotational; on the silicate shoulder
-H2,H2,8.0251000,H2 0-0 S(4),molecular,H2,narrow,Pure rotational
-H2,H2,6.9095000,H2 0-0 S(5),molecular,H2,narrow,Blends with [Ar II] 6.99
-H2,H2,6.1086000,H2 0-0 S(6),molecular,H2,narrow,Pure rotational
-H2,H2,5.5112000,H2 0-0 S(7),molecular,H2,narrow,Pure rotational
-H2,H2,2.1218000,H2 1-0 S(1),molecular,H2,narrow,Ro-vibrational; shock tracer
-H2,H2,2.2235000,H2 1-0 S(0),molecular,H2,narrow,Ro-vibrational
-H2,H2,2.4066000,H2 1-0 Q(1),molecular,H2,narrow,Ro-vibrational
+H2,H2,28.2188000,H2 0-0 S(0),molecular,H2,narrow,"Pure rotational"
+H2,H2,17.0348000,H2 0-0 S(1),molecular,H2,narrow,"Pure rotational"
+H2,H2,12.2786000,H2 0-0 S(2),molecular,H2,narrow,"Pure rotational"
+H2,H2,9.6649000,H2 0-0 S(3),molecular,H2,narrow,"Pure rotational; on the silicate shoulder"
+H2,H2,8.0251000,H2 0-0 S(4),molecular,H2,narrow,"Pure rotational"
+H2,H2,6.9095000,H2 0-0 S(5),molecular,H2,narrow,"Blends with [Ar II] 6.99"
+H2,H2,6.1086000,H2 0-0 S(6),molecular,H2,narrow,"Pure rotational"
+H2,H2,5.5112000,H2 0-0 S(7),molecular,H2,narrow,"Pure rotational"
+H2,H2,2.1218000,H2 1-0 S(1),molecular,H2,narrow,"Ro-vibrational; shock tracer"
+H2,H2,2.0338000,H2 1-0 S(2),molecular,H2,narrow,"Ro-vibrational; shock tracer"
+H2,H2,1.9576000,H2 1-0 S(3),molecular,H2,narrow,"Ro-vibrational; shock tracer"
+H2,H2,1.7480000,H2 1-0 S(7),molecular,H2,narrow,"Ro-vibrational; weak"
+H2,H2,2.2235000,H2 1-0 S(0),molecular,H2,narrow,"Ro-vibrational"
+H2,H2,2.2477000,H2 2-1 S(1),molecular,H2,narrow,"Ro-vibrational overtone; fluorescence/shock diagnostic vs 1-0 S(1)"
+H2,H2,2.4066000,H2 1-0 Q(1),molecular,H2,narrow,"Ro-vibrational"
+H2,H2,2.4134000,H2 1-0 Q(2),molecular,H2,narrow,"Ro-vibrational"
+H2,H2,2.4237000,H2 1-0 Q(3),molecular,H2,narrow,"Ro-vibrational; blends with Q(2)/Br-gamma wing"

@@ -29,6 +29,7 @@ from __future__ import annotations
 import os
 
 import numpy as np
+import pandas as pd
 
 from .spectrum import Spectrum
 
@@ -163,7 +164,9 @@ def plot_dust_bands(spectrum: Spectrum = None, bands=None, ax=None, rest=None,
                     kinds=None, names=None, alpha=0.16, label_bands=True,
                     label_rotation=90, label_size=7, label_y=0.97,
                     stagger=True, min_width_frac=0.0, legend=True,
-                    draw_peak=True, **spectrum_kwargs):
+                    draw_peak=True, features=None, include_continuum=False,
+                    max_width_frac=0.35, max_bands=18,
+                    min_label_sep=0.035, **spectrum_kwargs):
     """Shade known dust and molecular bands over a spectrum.
 
     This is the "where are CO, SiO, AlO, PAH and silicate" figure. Each entry
@@ -194,6 +197,28 @@ def plot_dust_bands(spectrum: Spectrum = None, bands=None, ax=None, rest=None,
         when zoomed out, where a 0.05 um ice band is a line not a band.
     draw_peak : bool
         Dotted vertical line at ``lam_peak_um``.
+    features : sequence of Feature, optional
+        Draw only bands that actually bracket a detected feature. This is
+        usually the figure you want: it answers "which bands do I have
+        evidence for" instead of "which bands exist", and it is the single
+        most effective way to stop the overlay swamping the data.
+    include_continuum : bool
+        Include the featureless entries -- amorphous carbon, graphite, HAC
+        -- which span the whole mid-infrared. Excluded by default because
+        shading them covers every other band on the axis. They are
+        recognised by having no peak wavelength.
+    max_width_frac : float
+        Skip bands wider than this fraction of the plotted range, for the
+        same reason.
+    max_bands : int or None
+        Keep at most this many bands, preferring the narrowest (most
+        specific) ones. Set to ``None`` for no cap. The band table has ~80
+        entries and the mid-infrared has overlapping PAH, silicate and ice
+        bands nearly everywhere, so drawing them all is unreadable.
+    min_label_sep : float
+        Minimum separation between two labels on the same stagger row, as a
+        fraction of the x-range. Labels that would overprint are dropped
+        rather than written on top of each other; the band is still shaded.
 
     Notes
     -----
@@ -225,13 +250,39 @@ def plot_dust_bands(spectrum: Spectrum = None, bands=None, ax=None, rest=None,
         df = df[df["kind"].isin(list(kinds))]
     if names:
         df = df[df["name"].isin(list(names))]
+    if not include_continuum and not names:
+        # Featureless entries have no peak; they bracket the entire MIR and
+        # would shade every other band out of visibility.
+        df = df[pd.to_numeric(df["lam_peak_um"], errors="coerce").notna()]
 
     x0, x1 = ax.get_xlim()
     span = x1 - x0
     # Convert band wavelengths into whichever frame the axis is in.
     shift = 1.0 if rest else (1.0 + z)
 
+    if features is not None:
+        # The band table is rest-frame, so compare rest-frame centres
+        # regardless of which frame the axis happens to be drawn in.
+        ref = [c for c in (getattr(f, "rest_center", None) for f in features)
+               if c is not None and np.isfinite(c)]
+        keep = df.apply(
+            lambda r: any(r["lam_min_um"] <= c <= r["lam_max_um"] for c in ref),
+            axis=1)
+        df = df[keep] if len(df) else df
+
+    width = (pd.to_numeric(df["lam_max_um"], errors="coerce")
+             - pd.to_numeric(df["lam_min_um"], errors="coerce")) * shift
+    if max_width_frac is not None and span > 0 and len(df):
+        df = df[(width / span) <= max_width_frac]
+        width = width[df.index]
+    if max_bands is not None and len(df) > max_bands:
+        # Narrowest first: a specific band identifies something, a wide
+        # complex mostly just colours the background.
+        df = df.reindex(width.sort_values().index[:max_bands]).sort_values(
+            "lam_min_um")
+
     seen_kinds = {}
+    label_rows = {}
     k = 0
     for _, row in df.iterrows():
         lo, hi = row["lam_min_um"] * shift, row["lam_max_um"] * shift
@@ -249,11 +300,25 @@ def plot_dust_bands(spectrum: Spectrum = None, bands=None, ax=None, rest=None,
             if x0 <= p <= x1:
                 ax.axvline(p, color=color, ls=":", lw=0.8, alpha=0.75, zorder=0)
         if label_bands:
-            yy = label_y - (0.06 * (k % 3) if stagger else 0.0)
-            ax.text(0.5 * (max(lo, x0) + min(hi, x1)), yy, str(row["name"]),
-                    rotation=label_rotation, ha="center", va="top",
-                    fontsize=label_size, color=color, alpha=0.95,
-                    transform=ax.get_xaxis_transform(), clip_on=True)
+            xc = 0.5 * (max(lo, x0) + min(hi, x1))
+            nrow = 3 if stagger else 1
+            placed = False
+            for attempt in range(nrow):
+                r = (k + attempt) % nrow
+                last = label_rows.get(r)
+                if last is None or span <= 0 or abs(xc - last) / span >= min_label_sep:
+                    label_rows[r] = xc
+                    yy = label_y - 0.06 * r
+                    ax.text(xc, yy, str(row["name"]),
+                            rotation=label_rotation, ha="center", va="top",
+                            fontsize=label_size, color=color, alpha=0.95,
+                            transform=ax.get_xaxis_transform(), clip_on=True)
+                    placed = True
+                    break
+            if not placed:
+                # Every row is occupied nearby; shade without a label rather
+                # than overprint.
+                pass
         seen_kinds.setdefault(kind, color)
         k += 1
 

@@ -274,22 +274,49 @@ def match_lines(features, **kwargs) -> dict:
     return out
 
 
-def bands_covering(rest_wavelength_um, bands=None, kinds=None) -> pd.DataFrame:
+def bands_covering(rest_wavelength_um, bands=None, kinds=None,
+                   include_continuum=False, max_width_frac=1.0) -> pd.DataFrame:
     """Which dust/molecular bands bracket this rest wavelength.
 
     Unlike :func:`match_line` this is a containment test, not a proximity
     test: a solid-state band is an extended wavelength interval, so "is my
     feature inside the 9.7 um silicate feature" is the meaningful question,
     and a velocity offset from a band centre is not.
+
+    Results are ordered narrowest first, so the most specific
+    identification comes before the more generic complex that contains it
+    (``PAH 11.3`` ahead of ``PAH plateau 11-15``).
+
+    Parameters
+    ----------
+    include_continuum : bool
+        Include featureless entries -- amorphous carbon, graphite, HAC --
+        which are carried in the band table so the species is not lost,
+        but which span the whole mid-infrared and therefore "cover" every
+        feature. They are excluded by default because they identify
+        nothing: returning them would push every genuine band
+        identification down the list. They are recognisable by having no
+        peak wavelength.
+    max_width_frac : float
+        Also drop bands wider than this fraction of their own centre
+        wavelength.
     """
     if bands is None:
         bands = load_bands()
     df = bands
     if kinds:
         df = df[df["kind"].isin(list(kinds))]
-    sel = ((df["lam_min_um"] <= rest_wavelength_um)
-           & (df["lam_max_um"] >= rest_wavelength_um))
-    return df[sel].copy()
+    lo = pd.to_numeric(df["lam_min_um"], errors="coerce")
+    hi = pd.to_numeric(df["lam_max_um"], errors="coerce")
+    sel = (lo <= rest_wavelength_um) & (hi >= rest_wavelength_um)
+    if not include_continuum:
+        sel &= pd.to_numeric(df["lam_peak_um"], errors="coerce").notna()
+    width = hi - lo
+    if max_width_frac is not None:
+        mid = 0.5 * (lo + hi)
+        sel &= (width / mid.where(mid > 0)) <= max_width_frac
+    out = df[sel.fillna(False)].copy()
+    return out.reindex(width[out.index].sort_values().index)
 
 
 def corroborate(matches, detected_rest_um, lines=None, tol_kms=None,

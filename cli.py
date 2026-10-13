@@ -334,8 +334,9 @@ def _epoch_path(template, label):
 
 # ---------------------------------------------------------------------------
 def cmd_detect(args):
-    from .continuum import decompose
-    from .features import features_table, find_features, high_snr_regions
+    from .continuum import anchored_continuum, decompose
+    from .features import (features_table, find_features,
+                           find_features_multiscale, high_snr_regions)
     from .spectrum import read_spectrum
 
     paths = _expand_spectra(args.input)
@@ -357,10 +358,24 @@ def cmd_detect(args):
         z = _check_redshift(sp, args, path)
         if args.range:
             sp = sp.select(args.range[0], args.range[1], rest=bool(z))
-        dec = decompose(sp, broad_scale_kms=args.broad_scale,
-                        narrow_scale_kms=args.narrow_scale)
-        feats = find_features(sp, decomposition=dec, snr_min=args.snr,
-                              max_join_fraction=args.max_join_fraction)
+        if args.detector == "multiscale":
+            cont = anchored_continuum(
+                sp, scale_kms=args.broad_scale,
+                bands=not args.no_band_mask, n_iter=args.continuum_iters)
+            feats = find_features_multiscale(
+                sp, continuum=cont, snr_min=args.snr,
+                max_scale_kms=args.max_scale,
+                max_join_fraction=args.max_join_fraction)
+            # high_snr_regions still wants a Decomposition; build one that
+            # reuses the anchored continuum so the two agree.
+            dec = decompose(sp, broad_scale_kms=args.broad_scale,
+                            narrow_scale_kms=args.narrow_scale,
+                            continuum=cont)
+        else:
+            dec = decompose(sp, broad_scale_kms=args.broad_scale,
+                            narrow_scale_kms=args.narrow_scale)
+            feats = find_features(sp, decomposition=dec, snr_min=args.snr,
+                                  max_join_fraction=args.max_join_fraction)
         if args.identify:
             from .features import identify
             identify(feats, tol_res_elements=args.tol)
@@ -431,14 +446,131 @@ def _detect_output(args, path, stem, single):
 
 
 # ---------------------------------------------------------------------------
+
+def cmd_steps(args):
+    """Report flux discontinuities inside a spectrum.
+
+    A jump between two *labelled* segments is caught by ``jspec stitch``.
+    This is for the other case: a step sitting inside what claims to be
+    one continuous spectrum, which no segment-aware check can see.
+    """
+    import numpy as np
+
+    from .discontinuity import find_steps, steps_table
+    from .spectrum import read_spectrum
+
+    paths = _expand_spectra(args.input)
+    for path in paths:
+        sp = read_spectrum(path)
+        wave = np.asarray(sp.wavelength, dtype=float)
+        flux = np.asarray(sp.flux, dtype=float)
+        if args.range:
+            lo, hi = args.range
+            keep = (wave >= lo) & (wave <= hi)
+            wave, flux = wave[keep], flux[keep]
+        steps = find_steps(wave, flux, window_um=args.window,
+                           snr_min=args.snr, min_ratio=args.min_ratio,
+                           persist=args.persist, grad_factor=args.grad_factor,
+                           max_rise_um=args.max_rise)
+        label = _epoch_label(path) or os.path.basename(path)
+        if not steps:
+            print(f"{label}: no step discontinuities "
+                  f"(|S/N| > {args.snr:g} and ratio beyond "
+                  f"{args.min_ratio:g}x)")
+            continue
+        print(f"{label}: {len(steps)} step discontinuit"
+              f"{'y' if len(steps) == 1 else 'ies'}")
+        for st in steps[:args.top]:
+            print(f"  {st.wavelength:8.3f} um   x{st.ratio:6.2f}   "
+                  f"S/N={st.snr:+7.1f}   "
+                  f"{st.lo_level:.3e} -> {st.hi_level:.3e}")
+        if args.output or args.outdir:
+            out = _detect_output(path, args, len(paths)).replace(
+                "_features.", "_steps.")
+            steps_table(steps).write(out, overwrite=True)
+            print(f"  -> {out}")
+
+
+def cmd_bands(args):
+    """Measure the flux in catalogued dust and molecular band windows.
+
+    Complements ``detect``. The multiscale detector judges a feature
+    against flanking annuli, which cannot work for a band as wide as the
+    annulus itself -- the 7.7 um aromatic complex has its baseline set by
+    the 6.2 and 8.6 um bands and comes out at Z ~ 2 despite a residual
+    twenty times the pixel noise. Band positions are known in advance, so
+    here the flux is simply integrated over the catalogued window.
+    """
+    from .features import bands_table, measure_bands
+    from .spectrum import read_spectrum
+
+    paths = _expand_spectra(args.input)
+    multi = len(paths) > 1
+    written = []
+    for path in paths:
+        label, stem = _epoch_label(path)
+        if multi:
+            print(f"\n{'=' * 70}\n{label or stem}  "
+                  f"({os.path.basename(path)})\n{'=' * 70}")
+        sp = read_spectrum(path, redshift=args.redshift,
+                           mask_red_end=_red_end(args))
+        _check_redshift(sp, args, path)
+        if args.range:
+            sp = sp.select(args.range[0], args.range[1], rest=bool(sp.redshift))
+
+        ms = measure_bands(sp, snr_min=args.snr, kinds=args.kinds,
+                           max_width_frac=args.max_width_frac,
+                           continuum_kwargs={"scale_kms": args.broad_scale,
+                                             "bands": not args.no_band_mask})
+        print(f"{len(ms)} band windows with |S/N| > {args.snr:g}")
+
+        # Overlapping windows are competing identifications of one excess,
+        # not independent detections -- the 11.3 um excess matches PAH,
+        # SiC, forsterite and AlO. Group them so the output reads as
+        # alternatives rather than as four separate bands.
+        #
+        # Cluster on the band *peak*, not on window overlap: the wide
+        # entries overlap their neighbours on both sides, so overlap
+        # grouping chains transitively and collapses 7.5-24 um into one
+        # meaningless group. Peaks within a few percent genuinely are the
+        # same feature.
+        groups, ref = [], float("-inf")
+        for m in sorted(ms, key=lambda m: m.peak):
+            if m.peak > ref * (1.0 + args.group_frac):
+                groups.append([])
+                ref = m.peak
+            groups[-1].append(m)
+        for i, grp in enumerate(groups, 1):
+            grp.sort(key=lambda m: -abs(m.snr))
+            span = (f"{min(g.lo for g in grp):.2f}-"
+                    f"{max(g.hi for g in grp):.2f} um")
+            extra = "" if len(grp) == 1 else f"   ({len(grp)} candidate IDs)"
+            print(f"\n  [{i}] {span}{extra}")
+            for m in grp[: args.top]:
+                print(f"      {m.name[:36]:36s} S/N={m.snr:+8.1f}  "
+                      f"contrast={m.contrast:+6.2f}  peak S/N={m.peak_snr:+7.1f}")
+
+        out = _detect_output(args, path, stem, single=not multi)
+        if out:
+            out = out.replace("_features.", "_bands.")
+            bands_table(ms).write(out, overwrite=True)
+            written.append(out)
+            print(f"\nwrote {out}")
+
+    if len(written) > 1:
+        print(f"\n{'=' * 70}\nwrote {len(written)} band tables")
+    return 0
+
+
 def cmd_plot(args):
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    from .continuum import decompose
+    from .continuum import anchored_continuum, decompose
     from .features import (features_from_table, find_features,
-                           high_snr_regions, identify)
+                           find_features_multiscale, high_snr_regions,
+                           identify)
     from .plotting import (plot_dust_bands, plot_features, plot_high_snr,
                            plot_spectrum)
     from .spectrum import read_spectrum
@@ -459,36 +591,50 @@ def cmd_plot(args):
         if args.range:
             sp = sp.select(args.range[0], args.range[1], rest=bool(z))
 
-        fig, ax = plt.subplots(figsize=(args.width, args.height))
-        if args.bands:
-            plot_dust_bands(sp, ax=ax, kinds=args.kinds or None,
-                            names=args.names or None, log_y=args.log,
-                            rebin=args.rebin,
-                            label_bands=not args.no_band_labels)
-        else:
-            plot_spectrum(sp, ax=ax, log_y=args.log, rebin=args.rebin)
-
-        if args.features or args.regions:
-            feats = None
+        # Detect first, so the band overlay can be restricted to the bands
+        # that actually bracket a detection. Drawing all ~80 catalogued
+        # bands buries the data under shading.
+        feats = dec = None
+        need = args.features or args.regions or (args.bands and not args.all_bands)
+        if need:
             saved = _features_for(args, path, stem)
             if saved:
                 feats = features_from_table(saved)
                 print(f"reusing {len(feats)} features from "
                       f"{os.path.basename(saved)}")
-            dec = None
+            cont = None
             if feats is None or args.regions:
-                dec = decompose(sp)
+                if args.detector == "multiscale":
+                    cont = anchored_continuum(sp, bands=not args.no_band_mask)
+                dec = decompose(sp, continuum=cont)
             if feats is None:
-                feats = identify(find_features(sp, decomposition=dec,
-                                               snr_min=args.snr))
-            if args.features:
-                plot_features(sp, feats, ax=ax, min_snr=args.label_snr,
-                              max_labels=args.max_labels)
-            if args.regions:
-                regs = high_snr_regions(sp, decomposition=dec,
-                                        snr_min=args.region_snr,
-                                        features=feats)
-                plot_high_snr(sp, regs, ax=ax, label=False)
+                if args.detector == "multiscale":
+                    found = find_features_multiscale(sp, continuum=cont,
+                                                     snr_min=args.snr)
+                else:
+                    found = find_features(sp, decomposition=dec,
+                                          snr_min=args.snr)
+                feats = identify(found)
+
+        fig, ax = plt.subplots(figsize=(args.width, args.height))
+        if args.bands:
+            plot_dust_bands(sp, ax=ax, kinds=args.kinds or None,
+                            names=args.names or None, log_y=args.log,
+                            rebin=args.rebin,
+                            features=None if args.all_bands else feats,
+                            max_bands=None if args.all_bands else args.max_bands,
+                            label_bands=not args.no_band_labels)
+        else:
+            plot_spectrum(sp, ax=ax, log_y=args.log, rebin=args.rebin)
+
+        if args.features:
+            plot_features(sp, feats, ax=ax, min_snr=args.label_snr,
+                          max_labels=args.max_labels)
+        if args.regions:
+            regs = high_snr_regions(sp, decomposition=dec,
+                                    snr_min=args.region_snr,
+                                    features=feats)
+            plot_high_snr(sp, regs, ax=ax, label=False)
 
         title = args.title
         if title is None and multi:
@@ -552,7 +698,11 @@ def cmd_fit(args):
     _check_redshift(sp, args, args.input)
     kw = dict(window_kms=args.window, continuum_order=args.continuum_order,
               allow_absorption=args.absorption, nlive=args.nlive,
-              sigma_max_kms=args.sigma_max)
+              sigma_max_kms=args.sigma_max, dlogz=args.dlogz,
+              sample=args.sample, bootstrap=args.bootstrap,
+              pixel_integrate=not args.no_pixel_integration,
+              err_scale=args.err_scale,
+              mask_ranges=[tuple(m) for m in args.mask] if args.mask else None)
     if args.select:
         print(f"model grid at {args.line:.5f} um (rest):")
         best, table, _ = fit_and_select(
@@ -579,10 +729,76 @@ def cmd_fit(args):
         plt.savefig(args.plot, dpi=130, bbox_inches="tight")
         print(f"\nwrote {args.plot}")
     if args.output:
-        np.savez(args.output, samples=r.samples,
-                 param_names=np.array(r.param_names), logz=r.logz,
-                 logz_err=r.logz_err, velocity=r.velocity, flux=r.flux,
-                 flux_err=r.flux_err, model=r.model)
+        from .fitting import save_fit
+        save_fit(r, args.output)
+        print(f"wrote {args.output}  "
+              f"(reload with jspec.fitting.load_fit for custom plots)")
+    return 0
+
+
+
+# ---------------------------------------------------------------------------
+def cmd_metallicity(args):
+    from . import metallicity as M
+    from .spectrum import read_spectrum
+
+    if args.explain:
+        M.describe()
+        return 0
+
+    sp = read_spectrum(args.input, redshift=args.redshift,
+                       mask_red_end=_red_end(args))
+    _check_redshift(sp, args, args.input)
+
+    print("measuring diagnostic lines ...")
+    lines = M.measure_lines(sp, names=args.lines, snr_min=args.snr,
+                            nlive=args.nlive, verbose=True)
+    det = [k for k, v in lines.items() if v.detected]
+    print(f"\n{len(det)}/{len(lines)} diagnostic line(s) detected\n")
+
+    # Ionisation first, deliberately: it decides whether the abundance
+    # methods below are even applicable, so it is not a footnote to them.
+    print("=" * 70)
+    print("IONISATION DIAGNOSTICS  (read these before trusting any abundance)")
+    print("=" * 70)
+    ratios = M.ionisation_diagnostics(lines)
+    if not ratios:
+        print("  none measurable")
+    for r in ratios:
+        print(r.summary() + "\n")
+
+    if not args.no_extinction:
+        print("=" * 70)
+        print("EXTINCTION")
+        print("=" * 70)
+        try:
+            print(M.extinction_from_feii(lines).summary() + "\n")
+        except Exception as exc:
+            print(f"  not measurable: {exc}\n")
+
+    print("=" * 70)
+    print("HOST ABUNDANCE  (nebular Ne/H)")
+    print("=" * 70)
+    try:
+        print(M.neon_abundance(lines, te=args.te, ne=args.ne).summary() + "\n")
+    except Exception as exc:
+        print(f"  not measurable: {exc}\n")
+
+    print("=" * 70)
+    print("PROGENITOR METALLICITY  (ejecta Ni/Fe -- Type Ia)")
+    print("=" * 70)
+    try:
+        print(M.nickel_to_iron(lines).summary() + "\n")
+    except Exception as exc:
+        print(f"  not measurable: {exc}\n")
+
+    if args.output:
+        import json
+        rows = {k: dict(wavelength_um=v.rest_wavelength_um, flux=v.flux,
+                        flux_err=v.flux_err, detected=bool(v.detected))
+                for k, v in lines.items()}
+        with open(args.output, "w") as fh:
+            json.dump(rows, fh, indent=2, default=float)
         print(f"wrote {args.output}")
     return 0
 
@@ -842,6 +1058,27 @@ def build_parser():
                         "SN2024aecx_2025-01-16_features.ecsv")
     p.add_argument("--snr", type=float, default=5.0)
     p.add_argument("--region-snr", type=float, default=15.0)
+    p.add_argument("--detector", choices=("multiscale", "twoscale"),
+                   default="multiscale",
+                   help="'multiscale' (default) matches a bank of filters "
+                        "spanning every width from the resolution limit to "
+                        "--max-scale, so a feature is found at its own width "
+                        "rather than chopped into fragments by a fixed pair "
+                        "of smoothers. 'twoscale' is the older narrow+broad "
+                        "cascade, kept for comparison")
+    p.add_argument("--max-scale", type=float, default=30000.0,
+                   help="widest feature the multiscale detector searches for "
+                        "(km/s). Features wider than this are continuum by "
+                        "definition and cannot be recovered")
+    p.add_argument("--continuum-iters", type=int, default=2,
+                   help="refit passes of the anchored continuum; each masks "
+                        "the features found by the previous pass")
+    p.add_argument("--no-band-mask", action="store_true",
+                   help="do not mask known dust/molecular band windows when "
+                        "fitting the continuum. Masking is on by default "
+                        "because a 1 um-wide band at 7.7 um is as smooth as "
+                        "the continuum itself, so without it the baseline "
+                        "arches over the band and absorbs most of its flux")
     p.add_argument("--broad-scale", type=float, default=30000.0,
                    help="velocity scale separating continuum from broad (km/s)")
     p.add_argument("--narrow-scale", type=float, default=600.0)
@@ -854,6 +1091,103 @@ def build_parser():
     p.add_argument("--range", nargs=2, type=float, metavar=("LO", "HI"))
     p.add_argument("--top", type=int, default=40)
     p.set_defaults(func=cmd_detect)
+
+    # steps --------------------------------------------------------------
+    p = _p_common(sub.add_parser(
+        "steps", help="find flux discontinuities inside a spectrum"))
+    p.add_argument("input", nargs="+",
+                   help="spectra, a glob, or the target folder holding them")
+    p.add_argument("-o", "--output")
+    p.add_argument("-d", "--outdir", metavar="DIR")
+    p.add_argument("--snr", type=float, default=8.0,
+                   help="minimum |S/N| of the level change (default 8)")
+    p.add_argument("--min-ratio", type=float, default=1.4,
+                   help="the level must change by at least this factor "
+                        "(default 1.4). Significance alone is not enough: a "
+                        "steep continuum is significant too.")
+    p.add_argument("--window", type=float, default=0.25,
+                   help="half-width in um averaged either side of a "
+                        "candidate boundary (default 0.25)")
+    p.add_argument("--persist", type=float, default=0.5,
+                   help="fraction of the jump that must still be there one "
+                        "window further on (default 0.5). This is what "
+                        "separates a step from the edge of a real band. "
+                        "Set 0 to report every edge.")
+    p.add_argument("--max-rise", type=float, default=0.06,
+                   help="the level must complete its change within this "
+                        "many um (default 0.06). An instrumental step is "
+                        "unresolved; a real band edge is not. Set 0 to "
+                        "disable.")
+    p.add_argument("--grad-factor", type=float, default=3.0,
+                   help="the jump must beat this multiple of the "
+                        "spectrum's typical level change (default 3). "
+                        "Needed because a background-subtracted spectrum "
+                        "sits on a near-zero pedestal, which turns an "
+                        "ordinary rise into a large ratio.")
+    p.add_argument("--range", nargs=2, type=float, metavar=("LO", "HI"))
+    p.add_argument("--top", type=int, default=20)
+    p.set_defaults(func=cmd_steps)
+
+    # bands --------------------------------------------------------------
+    p = _p_common(sub.add_parser(
+        "bands", help="measure flux in known dust/molecular band windows"))
+    p.add_argument("input", nargs="+",
+                   help="stitched spectra, a glob, or the target folder "
+                        "holding them")
+    p.add_argument("-o", "--output",
+                   help="write the band table here; with several inputs this "
+                        "becomes the suffix: <spectrum stem>_bands.ecsv")
+    p.add_argument("-d", "--outdir", metavar="DIR",
+                   help="write one band table per input here")
+    p.add_argument("--snr", type=float, default=3.0,
+                   help="minimum |S/N| of the integrated band flux")
+    p.add_argument("--kinds", nargs="+", default=None,
+                   help="restrict to these band kinds, e.g. pah silicate ice")
+    p.add_argument("--max-width-frac", type=float, default=0.6,
+                   help="skip catalogue entries wider than this fraction of "
+                        "their own peak wavelength -- the plateaux and the "
+                        "featureless carbon continua, which are not "
+                        "measurable as bands")
+    p.add_argument("--top", type=int, default=6,
+                   help="candidate identifications listed per group")
+    p.add_argument("--group-frac", type=float, default=0.08,
+                   help="band peaks within this fractional separation are "
+                        "treated as competing IDs of one excess")
+    p.add_argument("--broad-scale", type=float, default=30000.0,
+                   help="continuum stiffness (km/s)")
+    p.add_argument("--no-band-mask", action="store_true",
+                   help="do not mask band windows when fitting the continuum")
+    p.add_argument("--range", nargs=2, type=float, metavar=("LO", "HI"))
+    p.set_defaults(func=cmd_bands)
+
+    # metallicity --------------------------------------------------------
+    p = _p_common(sub.add_parser(
+        "metallicity",
+        help="abundance and ionisation diagnostics from fine-structure lines"))
+    p.add_argument("input", nargs="?", help="a stitched spectrum")
+    p.add_argument("--explain", action="store_true",
+                   help="print the methodology notes and exit (no spectrum "
+                        "needed) -- which method applies when, and why")
+    p.add_argument("--lines", nargs="+", default=None,
+                   help="restrict to these diagnostic lines "
+                        "(default: all of them)")
+    p.add_argument("--snr", type=float, default=3.0,
+                   help="a line below this is kept as an upper limit, not "
+                        "dropped")
+    p.add_argument("--nlive", type=int, default=300,
+                   help="dynesty live points per line fit")
+    p.add_argument("--dlogz", type=float, default=0.01,
+                   help="sampler convergence tolerance on the remaining "
+                        "evidence")
+    p.add_argument("--te", type=float, default=1e4,
+                   help="electron temperature [K] for the neon emissivities")
+    p.add_argument("--ne", type=float, default=1e2,
+                   help="electron density [cm^-3]")
+    p.add_argument("--no-extinction", action="store_true",
+                   help="skip the [Fe II] 1.257/1.644 reddening estimate "
+                        "(NIR only; never measurable in a MIRI-only spectrum)")
+    p.add_argument("-o", "--output", help="write the line fluxes here (JSON)")
+    p.set_defaults(func=cmd_metallicity)
 
     # plot ---------------------------------------------------------------
     p = _p_common(sub.add_parser("plot", help="make an annotated figure"))
@@ -879,10 +1213,30 @@ def build_parser():
     p.add_argument("--no-band-labels", action="store_true")
     p.add_argument("--features", action="store_true",
                    help="detect and label features")
+    p.add_argument("--detector", choices=("multiscale", "twoscale"),
+                   default="multiscale",
+                   help="feature detector, as for `jspec detect`")
+    p.add_argument("--all-bands", action="store_true",
+                   help="with --bands, shade every catalogued band instead "
+                        "of only those bracketing a detected feature. The "
+                        "band table has ~80 entries covering nearly the "
+                        "whole mid-infrared, so this is unreadable on a "
+                        "full-range figure and is meant for zoomed views")
+    p.add_argument("--max-bands", type=int, default=18,
+                   help="cap on how many bands --bands shades, narrowest "
+                        "(most specific) first")
+    p.add_argument("--no-band-mask", action="store_true",
+                   help="do not mask dust band windows when fitting the "
+                        "continuum, as for `jspec detect`")
     p.add_argument("--regions", action="store_true",
                    help="shade high-S/N regions")
     p.add_argument("--snr", type=float, default=5.0)
-    p.add_argument("--label-snr", type=float, default=15.0)
+    p.add_argument("--label-snr", type=float, default=0.0,
+                   help="only label features above this significance. "
+                        "Defaults to 0, i.e. label everything that was "
+                        "detected, because --snr is already the gate that "
+                        "decides what is real. Raise it to thin a crowded "
+                        "figure without re-running detection")
     p.add_argument("--region-snr", type=float, default=15.0)
     p.add_argument("--max-labels", type=int, default=60)
     p.add_argument("--rebin", type=int, default=1)
@@ -907,7 +1261,11 @@ def build_parser():
                         "Bayesian evidence")
     p.add_argument("--profiles", nargs="*",
                    default=["gaussian", "lorentzian", "exp_gaussian"],
-                   help="profile grid for --select")
+                   help="profile grid for --select. Join names with '+' for "
+                        "a mixed model, e.g. gaussian+lorentzian fits a "
+                        "narrow core on broad wings; a '+' entry sets its own "
+                        "component count and is not swept over "
+                        "--max-components")
     p.add_argument("--max-components", type=int, default=3)
     p.add_argument("--delta-lnz", type=float, default=5.0)
     p.add_argument("--window", type=float, default=None,
@@ -916,7 +1274,34 @@ def build_parser():
     p.add_argument("--continuum-order", type=int, default=1, choices=(0, 1, 2))
     p.add_argument("--absorption", action="store_true",
                    help="allow negative amplitudes (fit a dip)")
-    p.add_argument("--nlive", type=int, default=500)
+    p.add_argument("--nlive", type=int, default=500,
+                   help="live points; ~500 per free parameter is a "
+                        "publication-grade setting")
+    p.add_argument("--dlogz", type=float, default=0.01,
+                   help="sampler convergence tolerance: stop when the "
+                        "evidence still to be collected falls below this")
+    p.add_argument("--sample", default="auto",
+                   choices=["auto", "unif", "rwalk", "rslice", "slice"],
+                   help="dynesty sampling method; rwalk or rslice are far "
+                        "more efficient than unif in more than ~10 dimensions")
+    p.add_argument("--bootstrap", type=int, default=0,
+                   help="dynesty bound bootstrap (0 disables it; enabling it "
+                        "on a sharp line causes huge enlargement factors)")
+    p.add_argument("--err-scale", default=None, metavar="auto|FACTOR",
+                   help="rescale the pipeline uncertainties before fitting. "
+                        "'auto' measures the real scatter from second "
+                        "differences and uses that -- MRS errors are "
+                        "routinely optimistic by 2x or more, which makes "
+                        "chi2 meaningless and rejects every model equally")
+    p.add_argument("--mask", nargs=2, type=float, action="append",
+                   metavar=("LO", "HI"),
+                   help="rest-frame micron range to exclude from the fit; "
+                        "repeatable. Use it to drop a bad pixel or a "
+                        "contaminating neighbour")
+    p.add_argument("--no-pixel-integration", action="store_true",
+                   help="sample the model at pixel centres instead of "
+                        "integrating it across each pixel (faster, but "
+                        "biases amplitude and centroid for unresolved lines)")
     p.add_argument("--plot")
     p.add_argument("-o", "--output", help="write posterior samples to .npz")
     p.set_defaults(func=cmd_fit)

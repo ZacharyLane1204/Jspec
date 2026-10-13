@@ -67,6 +67,7 @@ reparameterisation, not an extra assumption.
 """
 from __future__ import annotations
 
+import json
 import warnings
 from dataclasses import dataclass, field
 
@@ -214,6 +215,31 @@ def profile(name, v, v0, width, *extras):
     return fn(v, v0, width, *extras)
 
 
+def profile_list(profile_name, n_components=None):
+    """Expand a profile specification into one name per component.
+
+    A plain name (``"moffat"``) means every component has that shape. A
+    ``+``-joined specification (``"gaussian+moffat"``) assigns a shape to each
+    component in turn, which is how you fit a mixed model: a narrow Gaussian
+    core on a Moffat's broad wings, say, where neither shape alone describes
+    the feature. The component count is then fixed by the specification.
+    """
+    if isinstance(profile_name, (list, tuple)):
+        parts = list(profile_name)
+    else:
+        parts = [q.strip() for q in str(profile_name).split("+") if q.strip()]
+    for q in parts:
+        if q not in PROFILES:
+            raise KeyError(f"unknown profile {q!r}; available: {sorted(PROFILES)}")
+    if len(parts) == 1 and n_components:
+        parts = parts * n_components
+    if n_components is not None and len(parts) != n_components:
+        raise ValueError(
+            f"profile {profile_name!r} specifies {len(parts)} component(s) "
+            f"but n_components={n_components}; drop n_components or match it")
+    return parts
+
+
 def _profile_fwhm_kms(name, width, extras):
     """Analytic FWHM of a unit profile, where one exists."""
     if name in ("gaussian", "skew_gaussian"):
@@ -235,11 +261,16 @@ def _profile_fwhm_kms(name, width, extras):
 # ---------------------------------------------------------------------------
 # model evaluation
 # ---------------------------------------------------------------------------
-def _model_on_grid(vgrid, components, profile_name):
-    """Sum of unit-peak components scaled by their amplitudes."""
+def _model_on_grid(vgrid, components, profile_names):
+    """Sum of unit-peak components scaled by their amplitudes.
+
+    ``profile_names`` is one shape per component, so a model may mix shapes.
+    """
+    if isinstance(profile_names, str):
+        profile_names = [profile_names] * len(components)
     out = np.zeros_like(vgrid)
-    fn, extra_names, _ = PROFILES[profile_name]
-    for amp, v0, width, extras in components:
+    for nm, (amp, v0, width, extras) in zip(profile_names, components):
+        fn = PROFILES[nm][0]
         out = out + amp * fn(vgrid, v0, width, *extras)
     return out
 
@@ -270,6 +301,25 @@ def _convolve_lsf(vgrid, y, lsf_sigma_kms):
 # ---------------------------------------------------------------------------
 # result container
 # ---------------------------------------------------------------------------
+def _fmt_derived(key, value):
+    """One line of the derived-quantity block.
+
+    Values are either a (median, lo, hi) interval or a bare scalar, and after
+    a save/load round trip the interval arrives as a list rather than a tuple,
+    so both sequence types have to be accepted. Non-numeric entries (the
+    per-component profile name) are printed as text.
+    """
+    if isinstance(value, (tuple, list)) and len(value) == 3:
+        return (f"      {key:<26}{value[0]:>12.4g}  "
+                f"[{value[1]:.4g}, {value[2]:.4g}]")
+    if isinstance(value, str):
+        return f"      {key:<26}{value:>12}"
+    try:
+        return f"      {key:<26}{value:>12.4g}"
+    except (TypeError, ValueError):
+        return f"      {key:<26}{value!s:>12}"
+
+
 @dataclass
 class FitResult:
     """Posterior summary of one feature fit."""
@@ -318,20 +368,16 @@ class FitResult:
         L.append("  derived (intrinsic; instrumental LSF already removed by "
                  "forward-convolution):")
         for i, d in enumerate(self.derived.get("components", [])):
-            L.append(f"    component {i}:")
+            shape = d.get("profile")
+            L.append(f"    component {i}:" + (f"  [{shape}]" if shape else ""))
             for k, v in d.items():
-                if isinstance(v, tuple):
-                    L.append(f"      {k:<26}{v[0]:>12.4g}  [{v[1]:.4g}, {v[2]:.4g}]")
-                else:
-                    L.append(f"      {k:<26}{v:>12.4g}")
+                if k != "profile":
+                    L.append(_fmt_derived(k, v))
         tot = self.derived.get("total", {})
         if tot:
             L.append("    total:")
             for k, v in tot.items():
-                if isinstance(v, tuple):
-                    L.append(f"      {k:<26}{v[0]:>12.4g}  [{v[1]:.4g}, {v[2]:.4g}]")
-                else:
-                    L.append(f"      {k:<26}{v:>12.4g}")
+                L.append(_fmt_derived(k, v))
         f_med = self.best.get("err_inflation")
         if f_med is not None and f_med > 0.25:
             L.append("")
@@ -393,14 +439,94 @@ class FitResult:
 # ---------------------------------------------------------------------------
 # the fitter
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+def empirical_error_scale(flux, flux_err):
+    """Factor by which the quoted uncertainties understate the actual scatter.
+
+    Pipeline uncertainties are propagated from the detector model and do not
+    include the systematics that dominate a real extracted spectrum: residual
+    fringing, imperfect background subtraction, flat-field residuals and the
+    scale uncertainty introduced when bands are matched. On MRS they are
+    routinely optimistic by a factor of two or more, which makes chi2 useless
+    and makes every model look rejected.
+
+    The scatter is estimated from second differences, which cancel any smooth
+    continuum, and with a median-absolute-deviation estimator, which is
+    insensitive to the handful of pixels occupied by the line itself -- so the
+    feature being fitted does not inflate its own error bar.
+    """
+    y = np.asarray(flux, float)
+    e = np.asarray(flux_err, float)
+    good = np.isfinite(y) & np.isfinite(e) & (e > 0)
+    if good.sum() < 12:
+        return 1.0
+    y, e = y[good], e[good]
+    d2 = y[2:] - 2.0 * y[1:-1] + y[:-2]
+    mad = 1.4826 * float(np.median(np.abs(d2 - np.median(d2))))
+    sigma = mad / np.sqrt(6.0)
+    med = float(np.median(e))
+    if not np.isfinite(sigma) or sigma <= 0 or med <= 0:
+        return 1.0
+    return float(max(sigma / med, 1.0))
+
+
+def save_fit(result: FitResult, path):
+    """Write a complete :class:`FitResult` to a ``.npz`` file.
+
+    Everything needed to redraw the fit is stored, not just the posterior:
+    the continuum, the individual component curves and the derived physical
+    quantities are all kept, so :func:`load_fit` can hand back a result you
+    can re-plot (or plot your own way) without re-running the sampler.
+    """
+    comps = np.asarray(result.components, float) if len(result.components) \
+        else np.zeros((0, result.velocity.size))
+    meta = dict(rest_wavelength_um=result.rest_wavelength_um,
+                profile=result.profile, n_components=result.n_components,
+                logz=result.logz, logz_err=result.logz_err,
+                best=result.best, lo=result.lo, hi=result.hi,
+                derived=result.derived, chi2=result.chi2,
+                n_data=result.n_data, lsf_sigma_kms=result.lsf_sigma_kms,
+                meta=result.meta)
+    np.savez(path, samples=result.samples,
+             param_names=np.array(result.param_names, dtype=object),
+             velocity=result.velocity, flux=result.flux,
+             flux_err=result.flux_err, model=result.model,
+             continuum=result.continuum, components=comps,
+             meta_json=json.dumps(meta, default=float))
+
+
+def load_fit(path) -> FitResult:
+    """Read back a fit written by :func:`save_fit`.
+
+    The returned object is a real :class:`FitResult`, so ``.plot()``,
+    ``.summary()`` and ``.reduced_chi2`` all work as they did in the session
+    that produced it.
+    """
+    with np.load(path, allow_pickle=True) as z:
+        m = json.loads(str(z["meta_json"]))
+        return FitResult(
+            rest_wavelength_um=m["rest_wavelength_um"], profile=m["profile"],
+            n_components=int(m["n_components"]), logz=m["logz"],
+            logz_err=m["logz_err"], samples=z["samples"],
+            param_names=[str(x) for x in z["param_names"]],
+            best=m["best"], lo=m["lo"], hi=m["hi"], derived=m["derived"],
+            velocity=z["velocity"], flux=z["flux"], flux_err=z["flux_err"],
+            model=z["model"], continuum=z["continuum"],
+            components=[np.asarray(c) for c in z["components"]],
+            chi2=m["chi2"], n_data=int(m["n_data"]),
+            lsf_sigma_kms=m["lsf_sigma_kms"], meta=m.get("meta", {}))
+
+
 def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
                 profile_name="gaussian", window_kms=None, window_um=None,
                 continuum_order=1, mask_ranges=None,
                 v_max=None, sigma_min_kms=None, sigma_max_kms=20000.0,
                 amp_scale=5.0, allow_absorption=False, fit_error_inflation=True,
-                mode=None, nlive=500, dlogz=0.1, sample="auto", bound="multi",
+                mode=None, nlive=500, dlogz=0.01, sample="auto", bound="multi",
                 rstate=None, maxiter=None, oversample=6.0, print_progress=False,
-                lsf_sigma_kms=None) -> FitResult:
+                lsf_sigma_kms=None, bootstrap=0, pixel_integrate=True,
+                err_scale=None) -> FitResult:
     """Fit a single feature with nested sampling.
 
     Parameters
@@ -467,11 +593,11 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
         raise ImportError(
             "fit_feature needs dynesty: pip install dynesty") from exc
 
+    # profile_list validates each name and accepts a '+' specification
+    if len(profile_list(profile_name)) > 1:
+        n_components = len(profile_list(profile_name))
     if not 1 <= n_components <= 3:
         raise ValueError("n_components must be 1, 2 or 3")
-    if profile_name not in PROFILES:
-        raise KeyError(f"unknown profile {profile_name!r}; "
-                       f"available: {sorted(PROFILES)}")
     if continuum_order not in (0, 1, 2):
         raise ValueError("continuum_order must be 0, 1 or 2")
 
@@ -508,12 +634,48 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
     order = np.argsort(v)
     v, f, e = v[order], f[order], e[order]
 
+    # Rescale the uncertainties to the scatter actually present, if asked.
+    # Without this a chi2 of 100+ per degree of freedom simply reports that
+    # the pipeline errors are optimistic, and every candidate model is
+    # rejected for the same reason -- which tells you nothing about which
+    # model is right.
+    err_scale_used = 1.0
+    if err_scale is not None:
+        err_scale_used = (empirical_error_scale(f, e)
+                          if str(err_scale).lower() == "auto"
+                          else float(err_scale))
+        e = e * err_scale_used
+
     # Fine uniform velocity grid for model building + LSF convolution.
     dv_data = np.median(np.diff(v)) if v.size > 1 else 1.0
     dv = min(dv_data, max(lsf_sig, 1e-3) / oversample) if lsf_sig > 0 else dv_data
     dv = max(dv, (v[-1] - v[0]) / 200000.0)     # keep the grid finite
     pad = 5.0 * max(lsf_sig, 1.0)
     vgrid = np.arange(v[0] - pad, v[-1] + pad + dv, dv)
+
+    # Pixel edges, for integrating the model across each detector pixel
+    # instead of sampling it at the pixel centre. This matters whenever the
+    # feature is close to the sampling scale -- which is the normal case for
+    # an unresolved fine-structure line in MRS, where a resolution element is
+    # only about two pixels wide. Point-sampling then biases both the
+    # amplitude and the centroid, because the detector reports the *average*
+    # over the pixel and the average of a sharply peaked line is not its
+    # value at the centre.
+    if pixel_integrate and v.size >= 2:
+        v_edges = np.empty(v.size + 1)
+        v_edges[1:-1] = 0.5 * (v[1:] + v[:-1])
+        v_edges[0] = v[0] - 0.5 * (v[1] - v[0])
+        v_edges[-1] = v[-1] + 0.5 * (v[-1] - v[-2])
+        v_width = np.diff(v_edges)
+        _gstep = np.diff(vgrid)
+
+        def _to_data(y):
+            cum = np.concatenate(([0.0],
+                                  np.cumsum(0.5 * (y[1:] + y[:-1]) * _gstep)))
+            return np.diff(np.interp(v_edges, vgrid, cum)) / v_width
+    else:
+        def _to_data(y):
+            return np.interp(v, vgrid, y)
 
     # ---- priors --------------------------------------------------------
     if v_max is None:
@@ -532,18 +694,30 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
     a_max = amp_scale * max(span, float(np.std(f)), 1e-30)
     c_scale = max(abs(c_guess), np.std(f), 1e-30)
 
-    _, extra_names, extra_bounds = PROFILES[profile_name]
+    # Components may each have their own shape, so the parameter block is no
+    # longer a fixed stride: offs[i] is where component i starts.
+    # A '+' specification carries its own component count, so honour it rather
+    # than making the caller repeat the number.
+    _spec = profile_list(profile_name)
+    if len(_spec) > 1:
+        n_components = len(_spec)
+    pnames = profile_list(profile_name, n_components)
+
+    enames = [PROFILES[nm][1] for nm in pnames]
+    ebounds = [PROFILES[nm][2] for nm in pnames]
+    n_per_i = [3 + len(en) for en in enames]
+    offs = np.concatenate(([0], np.cumsum(n_per_i))).astype(int)
+    mixed = len(set(pnames)) > 1
 
     names = []
     for i in range(n_components):
         names += [f"amp{i}", f"v{i}_kms", f"sigma{i}_kms"]
-        names += [f"{nm}{i}" for nm in extra_names]
+        names += [f"{nm}{i}" for nm in enames[i]]
     names += [f"cont{k}" for k in range(continuum_order + 1)]
     if fit_error_inflation:
         names.append("err_inflation")
     ndim = len(names)
 
-    n_per = 3 + len(extra_names)
     ln_smin, ln_smax = np.log(sigma_min_kms), np.log(sigma_max_kms)
 
     def prior_transform(u):
@@ -552,22 +726,23 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
         # degeneracy. Implemented by sampling ordered uniforms in log-sigma:
         # u -> sorted increasing, which is a valid reparameterisation of the
         # joint prior restricted to the ordered region.
-        if n_components > 1:
-            us = np.sort(u[2::n_per][:n_components])
-        else:
-            us = u[2:3]
+        # With mixed shapes the components are already distinguishable, so
+        # ordering them by width is unnecessary and would wrongly forbid, say,
+        # a narrow Moffat sitting inside a broad Gaussian.
+        uw = np.array([u[offs[i] + 2] for i in range(n_components)])
+        us = np.sort(uw) if (n_components > 1 and not mixed) else uw
         for i in range(n_components):
-            b = i * n_per
+            b = int(offs[i])
             if allow_absorption:
                 x[b] = (2.0 * u[b] - 1.0) * a_max
             else:
                 x[b] = u[b] * a_max
             x[b + 1] = (2.0 * u[b + 1] - 1.0) * v_max
             x[b + 2] = np.exp(ln_smin + us[i] * (ln_smax - ln_smin))
-            for k, nm in enumerate(extra_names):
-                lo, hi = extra_bounds[nm]
+            for k, nm in enumerate(enames[i]):
+                lo, hi = ebounds[i][nm]
                 x[b + 3 + k] = lo + u[b + 3 + k] * (hi - lo)
-        cb = n_components * n_per
+        cb = int(offs[n_components])
         for k in range(continuum_order + 1):
             # Wide, zero-centred priors on the polynomial coefficients. The
             # higher-order coefficients get progressively tighter scales,
@@ -586,27 +761,28 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
     def unpack(x):
         comps = []
         for i in range(n_components):
-            b = i * n_per
+            b = int(offs[i])
             comps.append((x[b], x[b + 1], x[b + 2],
-                          tuple(x[b + 3: b + 3 + len(extra_names)])))
-        cb = n_components * n_per
+                          tuple(x[b + 3: b + 3 + len(enames[i])])))
+        cb = int(offs[n_components])
         cc = x[cb: cb + continuum_order + 1]
         fi = x[-1] if fit_error_inflation else 0.0
         return comps, cc, fi
 
     def model_at_data(x, return_parts=False):
         comps, cc, _ = unpack(x)
-        y = _model_on_grid(vgrid, comps, profile_name)
+        y = _model_on_grid(vgrid, comps, pnames)
         y = _convolve_lsf(vgrid, y, lsf_sig)
-        line = np.interp(v, vgrid, y)
+        line = _to_data(y)
         cont = sum(c * p for c, p in zip(cc, v_pow))
         if not return_parts:
             return line + cont
         parts = []
         for c in comps:
-            yc = _convolve_lsf(vgrid, _model_on_grid(vgrid, [c], profile_name),
+            yc = _convolve_lsf(vgrid,
+                               _model_on_grid(vgrid, [c], [pnames[len(parts)]]),
                                lsf_sig)
-            parts.append(np.interp(v, vgrid, yc))
+            parts.append(_to_data(yc))
         return line + cont, cont, parts
 
     def loglike(x):
@@ -618,9 +794,13 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
         var = np.where(var > 0, var, np.inf)
         return float(-0.5 * np.sum((f - m) ** 2 / var + np.log(2.0 * np.pi * var)))
 
+    # bootstrap=0 by default: with a sharply peaked, nearly unresolved line
+    # the posterior is tight enough that dynesty's bootstrapped ellipsoid
+    # enlargement becomes unstable and warns about a very large expansion
+    # factor, which makes uniform sampling extremely inefficient.
     sampler = dynesty.NestedSampler(
         loglike, prior_transform, ndim, nlive=nlive, bound=bound,
-        sample=sample, rstate=rstate)
+        sample=sample, rstate=rstate, bootstrap=bootstrap)
     sampler.run_nested(dlogz=dlogz, maxiter=maxiter, print_progress=print_progress)
     res = sampler.results
 
@@ -639,23 +819,24 @@ def fit_feature(spectrum: Spectrum, rest_wavelength_um, *, n_components=1,
     var = e ** 2 + (best.get("err_inflation", 0.0) * model) ** 2
     chi2 = float(np.sum((f - model) ** 2 / np.where(e > 0, e ** 2, np.inf)))
 
-    derived = _derive(samples, names, n_components, n_per, extra_names,
-                      profile_name, vgrid, lsf_sig, rest_wavelength_um,
+    derived = _derive(samples, names, n_components, offs, enames,
+                      pnames, vgrid, lsf_sig, rest_wavelength_um,
                       continuum_order, fit_error_inflation)
 
     return FitResult(
-        rest_wavelength_um=float(rest_wavelength_um), profile=profile_name,
+        rest_wavelength_um=float(rest_wavelength_um), profile="+".join(pnames),
         n_components=n_components, logz=float(res.logz[-1]),
         logz_err=float(res.logzerr[-1]), samples=samples, param_names=names,
         best=best, lo=lo, hi=hi, derived=derived, velocity=v, flux=f,
         flux_err=e, model=model, continuum=cont, components=parts,
         chi2=chi2, n_data=int(v.size), lsf_sigma_kms=float(lsf_sig),
         meta=dict(window_kms=float(window_kms), continuum_order=continuum_order,
+                  err_scale=float(err_scale_used),
                   allow_absorption=allow_absorption, nlive=nlive,
                   redshift=spectrum.redshift, mode=mode))
 
 
-def _derive(samples, names, n_components, n_per, extra_names, profile_name,
+def _derive(samples, names, n_components, offs, enames, pnames,
             vgrid, lsf_sig, lam0, continuum_order, fit_error_inflation):
     """Posterior summaries of physical quantities, computed per sample.
 
@@ -672,7 +853,9 @@ def _derive(samples, names, n_components, n_per, extra_names, profile_name,
     out = {"components": [], "total": {}}
     fluxes_total = np.zeros(S.shape[0])
     for i in range(n_components):
-        b = i * n_per
+        b = int(offs[i])
+        extra_names = enames[i]
+        profile_name = pnames[i]
         amp = S[:, b]
         v0 = S[:, b + 1]
         wid = S[:, b + 2]
@@ -699,6 +882,7 @@ def _derive(samples, names, n_components, n_per, extra_names, profile_name,
                     float(np.percentile(a, 84)))
 
         d = {
+            "profile": profile_name,
             "amplitude": q(amp),
             "velocity_kms (peak/location)": q(v0),
             "velocity_kms (flux centroid)": q(centroid),
@@ -770,6 +954,13 @@ def fit_and_select(spectrum, rest_wavelength_um, *, max_components=3,
         wings, and one-sided tail cover most of the physically distinct cases,
         and the asymmetric variants are worth adding only once you can see
         asymmetry in the residuals of the symmetric fit.
+
+        Entries may be mixed specifications such as ``"gaussian+lorentzian"``
+        -- a narrow Gaussian core on broad Lorentzian wings. These are the
+        right model whenever one shape fits the core and a different one fits
+        the wings, which no single profile at any component count can do. A
+        mixed entry states its own component count, so it is fitted once
+        rather than swept over ``max_components``.
     delta_lnz : float
         Evidence margin required to prefer a more complex model.
 
@@ -779,7 +970,12 @@ def fit_and_select(spectrum, rest_wavelength_um, *, max_components=3,
     """
     results = []
     for pname in profiles:
-        for n in range(1, max_components + 1):
+        # A mixed specification such as "gaussian+moffat" already states how
+        # many components it has, so it is fitted once rather than swept.
+        combo = len(profile_list(pname)) > 1
+        counts = [len(profile_list(pname))] if combo \
+            else range(1, max_components + 1)
+        for n in counts:
             try:
                 r = fit_feature(spectrum, rest_wavelength_um,
                                 n_components=n, profile_name=pname, **kwargs)
