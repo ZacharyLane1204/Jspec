@@ -38,7 +38,7 @@ final_spectra/
 # whatever --outdir you pass, so they cannot be matched by a fixed name.
 # Listed explicitly rather than with a wildcard so that a genuine source
 # directory never gets ignored by accident.
-SN2024*/
+SN*/
 fs_data_*/
 mrs_data_*/
 ifu_data_*/
