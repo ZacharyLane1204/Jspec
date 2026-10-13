@@ -1,4 +1,0 @@
-# uncal files MAST lists for this proposal
-# name  size_MB  rights  filter  obs_id
-jw12586008001_06101_00001_mirimage_uncal.fits  2113.6  PUBLIC  P750L  jw12586008001_06101_00001_mirimage
-jw12586008001_06101_00002_mirimage_uncal.fits  2113.6  PUBLIC  P750L  jw12586008001_06101_00002_mirimage
